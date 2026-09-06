@@ -21,7 +21,8 @@ data class DetailUiState(
     val detailData: AnimeDetailData? = null,
     val error: String? = null,
     val isBookmarked: Boolean = false,
-    val lastWatchedHistory: WatchHistoryEntity? = null
+    val lastWatchedHistory: WatchHistoryEntity? = null,
+    val watchedEpisodes: Map<String, WatchHistoryEntity> = emptyMap()
 )
 
 class DetailViewModel(application: Application) : AndroidViewModel(application) {
@@ -103,10 +104,11 @@ class DetailViewModel(application: Application) : AndroidViewModel(application) 
                     animeId.contains(derivedSlug, ignoreCase = true) ||
                     derivedSlug.contains(animeId, ignoreCase = true) ||
                     (!item.animeTitle.isNullOrBlank() && (
-                        item.animeTitle.equals(_uiState.value.detailData?.anime?.title, ignoreCase = true)
+                        item.animeTitle.equals(_uiState.value.detailData?.anime?.displayTitle, ignoreCase = true)
                     ))
                 }
-                _uiState.update { it.copy(lastWatchedHistory = match) }
+                val epMap = historyList.associateBy { it.episodeSlug }
+                _uiState.update { it.copy(lastWatchedHistory = match, watchedEpisodes = epMap) }
             }
         }
     }

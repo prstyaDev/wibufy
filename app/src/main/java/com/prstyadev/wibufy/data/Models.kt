@@ -87,7 +87,14 @@ data class AnimeDetail(
     val synopsis: SynopsisDetail? = null,
     val genreList: List<GenreItem>? = null,
     val episodeList: List<EpisodeItem>? = null
-)
+) {
+    val displayTitle: String
+        get() = title?.takeIf { it.isNotBlank() }
+            ?: english?.takeIf { it.isNotBlank() }
+            ?: japanese?.takeIf { it.isNotBlank() }
+            ?: synonyms?.takeIf { it.isNotBlank() }
+            ?: ""
+}
 
 @JsonClass(generateAdapter = true)
 data class GenreListData(

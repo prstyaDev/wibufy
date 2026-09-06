@@ -13,7 +13,12 @@ class DetailRepository(context: Context) {
             try {
                 val anime = JsonUtils.animeDetailAdapter.fromJson(entity.rawDetailJson)
                 if (anime != null) {
-                    return AnimeDetailData(provider = "cache", anime = anime)
+                    val fixedAnime = if (anime.title.isNullOrBlank() && !entity.title.isNullOrBlank()) {
+                        anime.copy(title = entity.title)
+                    } else {
+                        anime
+                    }
+                    return AnimeDetailData(provider = "cache", anime = fixedAnime)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -70,9 +75,11 @@ class DetailRepository(context: Context) {
 
             val synopsisStr = anime.synopsis?.paragraphs?.joinToString("\n\n")
 
+            val resolvedTitle = anime.displayTitle.ifBlank { animeId.replace("-", " ").split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } } }
+
             val entity = AnimeDetailEntity(
                 animeId = animeId,
-                title = anime.title,
+                title = resolvedTitle,
                 poster = anime.poster,
                 synopsis = synopsisStr,
                 rating = anime.score?.value,

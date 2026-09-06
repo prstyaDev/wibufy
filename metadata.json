@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Wibufy",
+  "description": "Anime streaming and tracking app with parallax detail screen, bookmarking, and local history.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
