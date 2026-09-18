@@ -1,9 +1,41 @@
 package com.prstyadev.wibufy.data
 
 import android.content.Context
+import java.util.Locale
 
 class HomeRepository(context: Context) {
     private val homeCacheDao = AppDatabase.getDatabase(context).homeCacheDao()
+
+    companion object {
+        fun mapAniListMediaToAnimeItem(media: AniListMedia): AnimeItem {
+            val title = media.title?.displayTitle ?: ""
+            val poster = media.coverImage?.bestImageUrl ?: ""
+            val epText = media.nextAiringEpisode?.let { 
+                val currentAired = (it.episode ?: 2) - 1
+                "Ep ${currentAired.coerceAtLeast(1)}"
+            } ?: media.episodes?.let { "Ep $it" } ?: "Ongoing"
+
+            val scoreStr = media.averageScore?.let {
+                String.format(Locale.US, "%.1f", it / 10.0)
+            } ?: "7.5"
+            val genresStr = media.genres?.joinToString(", ") ?: ""
+            val synopsisClean = media.description?.replace(Regex("<[^>]*>"), "")?.trim()
+
+            return AnimeItem(
+                title = title,
+                poster = poster,
+                episodes = epText,
+                releasedOn = media.seasonYear?.toString() ?: "",
+                animeId = media.id.toString(),
+                type = media.format ?: "TV",
+                status = media.status ?: "RELEASING",
+                score = scoreStr,
+                synopsis = synopsisClean,
+                description = synopsisClean,
+                genres = genresStr
+            )
+        }
+    }
 
     suspend fun getCachedRecentAnime(sectionKey: String = "recent_anime_page1"): List<AnimeItem>? {
         val entity = homeCacheDao.getHomeCache(sectionKey) ?: return null
@@ -24,20 +56,81 @@ class HomeRepository(context: Context) {
     }
 
     suspend fun fetchAndCacheRecentAnime(page: Int = 1): Pair<RecentData?, List<AnimeItem>> {
-        val response = RetrofitClient.apiService.getRecentAnime(page = page)
-        val items = response.data?.animeList ?: emptyList()
-        if (items.isNotEmpty()) {
-            val sectionKey = if (page == 1) "recent_anime_page1" else "recent_anime_page2"
-            val json = JsonUtils.animeItemListAdapter.toJson(items)
-            homeCacheDao.insertHomeCache(
-                HomeCacheEntity(
-                    sectionKey = sectionKey,
-                    jsonContent = json,
-                    updatedAt = System.currentTimeMillis()
-                )
+        val sectionKey = if (page == 1) "recent_anime_page1" else "recent_anime_page2"
+        try {
+            val query = """
+                query (${'$'}page: Int, ${'$'}perPage: Int) {
+                  Page(page: ${'$'}page, perPage: ${'$'}perPage) {
+                    pageInfo {
+                      hasNextPage
+                    }
+                    media(type: ANIME, status_in: [RELEASING], sort: [TRENDING_DESC]) {
+                      id
+                      title {
+                        romaji
+                        english
+                        native
+                        userPreferred
+                      }
+                      coverImage {
+                        extraLarge
+                        large
+                        medium
+                      }
+                      bannerImage
+                      episodes
+                      nextAiringEpisode {
+                        episode
+                        airingAt
+                        timeUntilAiring
+                      }
+                      averageScore
+                      genres
+                      format
+                      status
+                      seasonYear
+                      description(asHtml: false)
+                    }
+                  }
+                }
+            """.trimIndent()
+
+            val request = GraphQLRequest(
+                query = query,
+                variables = mapOf("page" to page, "perPage" to 12)
             )
+
+            val response = RetrofitClient.aniListService.getSearchData(request)
+            val mediaList = response.data?.Page?.media ?: emptyList()
+            if (mediaList.isNotEmpty()) {
+                val items = mediaList.map { mapAniListMediaToAnimeItem(it) }
+                val json = JsonUtils.animeItemListAdapter.toJson(items)
+                homeCacheDao.insertHomeCache(
+                    HomeCacheEntity(
+                        sectionKey = sectionKey,
+                        jsonContent = json,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+                val recentData = RecentData(
+                    provider = "AniList",
+                    page = page,
+                    itemCount = items.size,
+                    animeList = items
+                )
+                return Pair(recentData, items)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-        return Pair(response.data, items)
+
+        // Fallback to cache if available
+        val cached = if (page == 1) getCachedRecentAnime() else getCachedPage2Anime()
+        if (!cached.isNullOrEmpty()) {
+            return Pair(RecentData(animeList = cached, page = page), cached)
+        }
+
+        return Pair(null, emptyList())
     }
 
     suspend fun getCachedCompletedAnime(): List<AnimeItem>? {
@@ -50,55 +143,45 @@ class HomeRepository(context: Context) {
     }
 
     suspend fun fetchAndCacheCompletedAnime(): List<AnimeItem> {
-        val fetchedList = try {
-            val accumulated = mutableListOf<AnimeItem>()
-            for (p in 1..3) {
-                val res = try {
-                    RetrofitClient.apiService.getCompleteAnime(page = p)
-                } catch (e: Exception) {
-                    try {
-                        RetrofitClient.apiService.getCompletedAnime(page = p)
-                    } catch (e2: Exception) {
-                        null
+        try {
+            val query = """
+                query {
+                  Page(page: 1, perPage: 33) {
+                    media(type: ANIME, status: FINISHED, sort: [POPULARITY_DESC]) {
+                      id
+                      title {
+                        romaji
+                        english
+                        native
+                        userPreferred
+                      }
+                      coverImage {
+                        extraLarge
+                        large
+                        medium
+                      }
+                      bannerImage
+                      episodes
+                      averageScore
+                      genres
+                      format
+                      status
+                      seasonYear
+                      description(asHtml: false)
                     }
+                  }
                 }
-                val list = res?.data?.animeList
-                if (!list.isNullOrEmpty()) {
-                    accumulated.addAll(list)
-                }
-                if (accumulated.size >= 33) break
-            }
+            """.trimIndent()
 
-            if (accumulated.isNotEmpty()) {
-                accumulated
-            } else {
-                val homeRes = try {
-                    RetrofitClient.apiService.getHome(page = 1)
-                } catch (e: Exception) {
-                    null
+            val request = GraphQLRequest(query = query)
+            val response = RetrofitClient.aniListService.getSearchData(request)
+            val mediaList = response.data?.Page?.media ?: emptyList()
+            if (mediaList.isNotEmpty()) {
+                val items = mediaList.map { media ->
+                    val item = mapAniListMediaToAnimeItem(media)
+                    item.copy(status = "Completed", episodes = media.episodes?.let { "$it" } ?: "12")
                 }
-                val homeComplete = homeRes?.data?.complete?.animeList
-                if (!homeComplete.isNullOrEmpty()) {
-                    homeComplete
-                } else {
-                    getCachedCompletedAnime() ?: getDefaultCompletedAnime()
-                }
-            }
-        } catch (e: Exception) {
-            getCachedCompletedAnime() ?: getDefaultCompletedAnime()
-        }
-
-        val finalList = if (fetchedList.size < 33) {
-            val defaults = getDefaultCompletedAnime()
-            val existingIds = fetchedList.mapNotNull { it.animeId }.toSet()
-            fetchedList + defaults.filter { it.animeId !in existingIds }
-        } else {
-            fetchedList
-        }
-
-        if (finalList.isNotEmpty()) {
-            try {
-                val json = JsonUtils.animeItemListAdapter.toJson(finalList)
+                val json = JsonUtils.animeItemListAdapter.toJson(items)
                 homeCacheDao.insertHomeCache(
                     HomeCacheEntity(
                         sectionKey = "completed_anime",
@@ -106,12 +189,13 @@ class HomeRepository(context: Context) {
                         updatedAt = System.currentTimeMillis()
                     )
                 )
-            } catch (e: Exception) {
-                // ignore
+                return items
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
 
-        return finalList
+        return getCachedCompletedAnime() ?: getDefaultCompletedAnime()
     }
 
     fun getDefaultCompletedAnime(): List<AnimeItem> {

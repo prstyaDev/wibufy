@@ -7,6 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -39,9 +40,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -476,27 +480,14 @@ fun DetailScreen(
                                             modifier = Modifier.size(22.dp)
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Column(
-                                            verticalArrangement = Arrangement.Center,
-                                            horizontalAlignment = Alignment.Start
-                                        ) {
-                                            Text(
-                                                text = buttonText,
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 14.sp,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            if (hasProgress) {
-                                                Text(
-                                                    text = "${formatDurationMs(lastHistory.lastPositionMs)} / ${formatDurationMs(lastHistory.totalDurationMs)}",
-                                                    color = Color.White.copy(alpha = 0.85f),
-                                                    fontSize = 10.5.sp,
-                                                    fontWeight = FontWeight.Medium
-                                                )
-                                            }
-                                        }
+                                        Text(
+                                            text = buttonText,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
 
                                     // Integrated subtle progress indicator at the bottom edge of the button
@@ -568,7 +559,7 @@ fun DetailScreen(
 
                         Spacer(modifier = Modifier.height(18.dp))
 
-                        // 4. SYNOPSIS WITH EXPAND/COLLAPSE TOGGLE
+                        // 4. SYNOPSIS WITH EXPAND/COLLAPSE TOGGLE (Matching Player Info Tab Style)
                         Text(
                             text = "Synopsis",
                             style = MaterialTheme.typography.titleMedium,
@@ -580,42 +571,88 @@ fun DetailScreen(
                         val rawSynopsis = anime.synopsis?.paragraphs?.joinToString("\n\n")?.trim()
                         val synopsisText = if (!rawSynopsis.isNullOrBlank()) rawSynopsis else "Sinopsis belum tersedia untuk anime ini."
 
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .animateContentSize(animationSpec = tween(durationMillis = 250))
-                        ) {
-                            Text(
-                                text = synopsisText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.72f),
-                                lineHeight = 21.sp,
-                                maxLines = if (isSynopsisExpanded) Int.MAX_VALUE else 3,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                        val cleanSynopsis = remember(synopsisText) {
+                            synopsisText.trim()
+                        }
 
-                            // Show toggle button if synopsis is fairly long
-                            if (synopsisText.length > 120) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .clickable { isSynopsisExpanded = !isSynopsisExpanded }
-                                        .padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                        if (isSynopsisExpanded) {
+                            Text(
+                                text = cleanSynopsis,
+                                color = Color.White.copy(alpha = 0.78f),
+                                fontSize = 13.5.sp,
+                                lineHeight = 21.sp,
+                                fontWeight = FontWeight.Normal,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { isSynopsisExpanded = !isSynopsisExpanded }
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Sembunyikan ▲",
+                                color = Color(0xFF3897F0),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable { isSynopsisExpanded = !isSynopsisExpanded }
+                                    .padding(vertical = 2.dp)
+                            )
+                        } else {
+                            var cutText by remember(cleanSynopsis) { mutableStateOf<String?>(null) }
+                            var canExpand by remember(cleanSynopsis) { mutableStateOf(false) }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        if (canExpand) isSynopsisExpanded = !isSynopsisExpanded
+                                    }
+                            ) {
+                                if (cutText != null && canExpand) {
                                     Text(
-                                        text = if (isSynopsisExpanded) "Sembunyikan" else "Selengkapnya",
-                                        color = Color(0xFF3EA5F4),
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                        text = buildAnnotatedString {
+                                            append(cutText!!)
+                                            append("... ")
+                                            withStyle(
+                                                style = SpanStyle(
+                                                    color = Color(0xFF3897F0),
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            ) {
+                                                append("Selengkapnya ▼")
+                                            }
+                                        },
+                                        color = Color.White.copy(alpha = 0.78f),
+                                        fontSize = 13.5.sp,
+                                        lineHeight = 21.sp,
+                                        fontWeight = FontWeight.Normal,
+                                        maxLines = 3
                                     )
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                    Icon(
-                                        imageVector = if (isSynopsisExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                        contentDescription = null,
-                                        tint = Color(0xFF3EA5F4),
-                                        modifier = Modifier.size(16.dp)
+                                } else {
+                                    Text(
+                                        text = cleanSynopsis,
+                                        color = Color.White.copy(alpha = 0.78f),
+                                        fontSize = 13.5.sp,
+                                        lineHeight = 21.sp,
+                                        fontWeight = FontWeight.Normal,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Clip,
+                                        onTextLayout = { textLayoutResult ->
+                                            if (textLayoutResult.hasVisualOverflow || textLayoutResult.lineCount > 3) {
+                                                canExpand = true
+                                                val lineEnd = textLayoutResult.getLineEnd(lineIndex = 2, visibleEnd = true)
+                                                val safeCutIndex = (lineEnd - 22).coerceAtLeast(0)
+                                                cutText = cleanSynopsis.substring(0, safeCutIndex).trimEnd()
+                                            } else {
+                                                canExpand = false
+                                            }
+                                        }
                                     )
                                 }
                             }

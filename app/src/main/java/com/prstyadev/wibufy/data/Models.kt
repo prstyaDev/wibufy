@@ -133,7 +133,9 @@ data class StreamData(
     val title: String? = null,
     val episodeSlug: String? = null,
     val defaultQuality: String? = null,
-    val qualities: List<QualityItem>? = null
+    val qualities: List<QualityItem>? = null,
+    val subtitles: List<ReconsumetSubtitle>? = null,
+    val headers: Map<String, String>? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -141,7 +143,9 @@ data class QualityItem(
     val quality: String? = null,
     val provider: String? = null,
     val type: String? = null,
-    val url: String? = null
+    val url: String? = null,
+    val rawUrl: String? = null,
+    val headers: Map<String, String>? = null
 )
 
 @JsonClass(generateAdapter = true)

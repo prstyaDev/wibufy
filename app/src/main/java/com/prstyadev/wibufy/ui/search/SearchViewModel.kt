@@ -3,8 +3,11 @@ package com.prstyadev.wibufy.ui.search
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.prstyadev.wibufy.data.AniListMedia
 import com.prstyadev.wibufy.data.AnimeItem
 import com.prstyadev.wibufy.data.DetailRepository
+import com.prstyadev.wibufy.data.GraphQLRequest
+import com.prstyadev.wibufy.data.HomeRepository
 import com.prstyadev.wibufy.data.RetrofitClient
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
@@ -129,12 +132,51 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         synopsisJob?.cancel()
         _uiState.update { it.copy(isSearching = true, error = null, hasSearched = true) }
         try {
-            val response = RetrofitClient.apiService.searchAnime(queryText)
-            val results = response.data?.animeList ?: emptyList()
-            
-            // Check cached synopses from local database
-            val animeIds = results.mapNotNull { it.animeId }
-            val cachedSynopses = detailRepository.getCachedSynopses(animeIds)
+            val query = """
+                query (${'$'}search: String) {
+                  Page(page: 1, perPage: 30) {
+                    media(type: ANIME, search: ${'$'}search, sort: SEARCH_MATCH) {
+                      id
+                      title {
+                        romaji
+                        english
+                        native
+                        userPreferred
+                      }
+                      coverImage {
+                        extraLarge
+                        large
+                        medium
+                      }
+                      bannerImage
+                      episodes
+                      averageScore
+                      genres
+                      format
+                      status
+                      seasonYear
+                      description(asHtml: false)
+                    }
+                  }
+                }
+            """.trimIndent()
+
+            val request = GraphQLRequest(
+                query = query,
+                variables = mapOf("search" to queryText)
+            )
+
+            val response = RetrofitClient.aniListService.getSearchData(request)
+            val mediaList = response.data?.Page?.media ?: emptyList()
+
+            val results = mediaList.map { media ->
+                HomeRepository.mapAniListMediaToAnimeItem(media)
+            }
+
+            val synopsisMap = mediaList.associate { media ->
+                val cleanSynopsis = media.description?.replace(Regex("<[^>]*>"), "")?.trim() ?: ""
+                media.id.toString() to cleanSynopsis
+            }
 
             _uiState.update { current ->
                 val sorted = applySorting(results, current.sortOption)
@@ -142,17 +184,9 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
                     isSearching = false,
                     rawResults = results,
                     searchResults = sorted,
-                    synopsisMap = cachedSynopses,
+                    synopsisMap = synopsisMap,
                     error = null
                 ) 
-            }
-
-            // Fetch real synopses on-demand in background for items not in cache
-            val unCachedIds = animeIds.filter { !cachedSynopses.containsKey(it) }.take(10)
-            if (unCachedIds.isNotEmpty()) {
-                synopsisJob = viewModelScope.launch {
-                    fetchSynopsesBatch(unCachedIds)
-                }
             }
 
         } catch (e: UnknownHostException) {

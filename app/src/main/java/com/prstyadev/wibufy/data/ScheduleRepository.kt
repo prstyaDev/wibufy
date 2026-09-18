@@ -3,6 +3,10 @@ package com.prstyadev.wibufy.data
 import android.content.Context
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.Locale
 
 data class ScheduleFetchResult(
     val scheduleMap: Map<Int, List<ScheduleAnimeItem>>,
@@ -53,39 +57,133 @@ class ScheduleRepository(context: Context) {
     }
 
     suspend fun fetchAndCacheSchedule(): ScheduleFetchResult = coroutineScope {
+        val zone = try { ZoneId.systemDefault() } catch (e: Exception) { ZoneId.of("Asia/Jakarta") }
+        val today = LocalDate.now(zone)
+        val dayOfWeekValue = today.dayOfWeek.value % 7
+        val sunday = today.minusDays(dayOfWeekValue.toLong())
+        val weekStartEpoch = sunday.atStartOfDay(zone).toEpochSecond()
+        val weekEndEpoch = weekStartEpoch + (7 * 24 * 3600)
+
         val scheduleDeferred = async {
             try {
-                RetrofitClient.apiService.getSchedule()
+                val query = """
+                    query (${'$'}start: Int, ${'$'}end: Int) {
+                      Page(page: 1, perPage: 50) {
+                        airingSchedules(airingAt_greater: ${'$'}start, airingAt_lesser: ${'$'}end, sort: TIME) {
+                          id
+                          episode
+                          airingAt
+                          timeUntilAiring
+                          media {
+                            id
+                            title {
+                              romaji
+                              english
+                              native
+                              userPreferred
+                            }
+                            coverImage {
+                              extraLarge
+                              large
+                              medium
+                            }
+                            averageScore
+                            genres
+                            format
+                          }
+                        }
+                      }
+                    }
+                """.trimIndent()
+
+                val request = GraphQLRequest(
+                    query = query,
+                    variables = mapOf(
+                        "start" to weekStartEpoch.toInt(),
+                        "end" to weekEndEpoch.toInt()
+                    )
+                )
+
+                val response = RetrofitClient.aniListService.getScheduleData(request)
+                response.data?.Page?.airingSchedules ?: emptyList()
             } catch (e: Exception) {
-                null
+                e.printStackTrace()
+                emptyList()
             }
         }
 
-        val ongoing1Deferred = async {
+        val ongoingDeferred = async {
             try {
-                RetrofitClient.apiService.getRecentAnime(page = 1)
+                val query = """
+                    query {
+                      Page(page: 1, perPage: 24) {
+                        media(type: ANIME, status_in: [RELEASING], sort: [TRENDING_DESC]) {
+                          id
+                          title {
+                            romaji
+                            english
+                            native
+                            userPreferred
+                          }
+                          coverImage {
+                            extraLarge
+                            large
+                            medium
+                          }
+                          episodes
+                          nextAiringEpisode {
+                            episode
+                          }
+                          averageScore
+                          genres
+                          format
+                          status
+                        }
+                      }
+                    }
+                """.trimIndent()
+                val request = GraphQLRequest(query = query)
+                val response = RetrofitClient.aniListService.getSearchData(request)
+                response.data?.Page?.media?.map { HomeRepository.mapAniListMediaToAnimeItem(it) } ?: emptyList()
             } catch (e: Exception) {
-                null
+                e.printStackTrace()
+                emptyList()
             }
         }
 
-        val ongoing2Deferred = async {
-            try {
-                RetrofitClient.apiService.getRecentAnime(page = 2)
-            } catch (e: Exception) {
-                null
-            }
+        val airingList = scheduleDeferred.await()
+        val ongoingList = ongoingDeferred.await()
+
+        val scheduleMap = mutableMapOf<Int, MutableList<ScheduleAnimeItem>>()
+        for (i in 0..6) {
+            scheduleMap[i] = mutableListOf()
         }
 
-        val scheduleResponse = scheduleDeferred.await()
-        val ongoing1Response = ongoing1Deferred.await()
-        val ongoing2Response = ongoing2Deferred.await()
+        for (item in airingList) {
+            val airingAtSeconds = item.airingAt ?: continue
+            val media = item.media ?: continue
+            val dateTime = Instant.ofEpochSecond(airingAtSeconds).atZone(zone)
+            val dayIndex = dateTime.dayOfWeek.value % 7
+            val timeStr = String.format(Locale.US, "%02d:%02d", dateTime.hour, dateTime.minute)
+            val scoreStr = media.averageScore?.let { String.format(Locale.US, "%.1f", it / 10.0) } ?: "7.5"
+            val estimation = if ((item.timeUntilAiring ?: 0) > 0) timeStr else "Sudah Tayang"
 
-        val scheduleList = scheduleResponse?.data?.scheduleList ?: emptyList()
-        val scheduleMap = parseScheduleList(scheduleList)
+            val scheduleItem = ScheduleAnimeItem(
+                title = media.title?.displayTitle ?: "",
+                poster = media.coverImage?.bestImageUrl ?: "",
+                type = media.format ?: "TV",
+                score = scoreStr,
+                estimation = estimation,
+                genres = media.genres?.joinToString(", ") ?: "",
+                animeId = media.id.toString(),
+                episodes = "Ep ${item.episode ?: 1}",
+                time = timeStr
+            )
+            scheduleMap[dayIndex]?.add(scheduleItem)
+        }
 
         // Cache schedule
-        if (scheduleMap.isNotEmpty()) {
+        if (airingList.isNotEmpty()) {
             val entities = scheduleMap.map { (dayIndex, animeList) ->
                 val json = JsonUtils.scheduleAnimeListAdapter.toJson(animeList)
                 ScheduleCacheEntity(
@@ -98,56 +196,39 @@ class ScheduleRepository(context: Context) {
         }
 
         // Cache ongoing
-        val ongoingList = mutableListOf<AnimeItem>()
-        val p1Items = ongoing1Response?.data?.animeList
-        if (!p1Items.isNullOrEmpty()) {
-            ongoingList.addAll(p1Items)
-            val json = JsonUtils.animeItemListAdapter.toJson(p1Items)
-            homeCacheDao.insertHomeCache(
-                HomeCacheEntity(
-                    sectionKey = "recent_anime_page1",
-                    jsonContent = json,
-                    updatedAt = System.currentTimeMillis()
+        if (ongoingList.isNotEmpty()) {
+            val p1 = ongoingList.take(12)
+            val p2 = ongoingList.drop(12).take(12)
+            if (p1.isNotEmpty()) {
+                homeCacheDao.insertHomeCache(
+                    HomeCacheEntity(
+                        sectionKey = "recent_anime_page1",
+                        jsonContent = JsonUtils.animeItemListAdapter.toJson(p1),
+                        updatedAt = System.currentTimeMillis()
+                    )
                 )
-            )
+            }
+            if (p2.isNotEmpty()) {
+                homeCacheDao.insertHomeCache(
+                    HomeCacheEntity(
+                        sectionKey = "recent_anime_page2",
+                        jsonContent = JsonUtils.animeItemListAdapter.toJson(p2),
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }
         }
-        val p2Items = ongoing2Response?.data?.animeList
-        if (!p2Items.isNullOrEmpty()) {
-            ongoingList.addAll(p2Items)
-            val json = JsonUtils.animeItemListAdapter.toJson(p2Items)
-            homeCacheDao.insertHomeCache(
-                HomeCacheEntity(
-                    sectionKey = "recent_anime_page2",
-                    jsonContent = json,
-                    updatedAt = System.currentTimeMillis()
-                )
-            )
+
+        val finalOngoing = if (ongoingList.isNotEmpty()) ongoingList else getCachedOngoingAnime()
+        val finalScheduleMap: Map<Int, List<ScheduleAnimeItem>> = if (airingList.isNotEmpty()) {
+            scheduleMap
+        } else {
+            getCachedSchedule()
         }
 
         ScheduleFetchResult(
-            scheduleMap = scheduleMap,
-            ongoingList = if (ongoingList.isNotEmpty()) ongoingList else getCachedOngoingAnime()
+            scheduleMap = finalScheduleMap,
+            ongoingList = finalOngoing
         )
-    }
-
-    private fun parseScheduleList(list: List<ScheduleDayItem>): Map<Int, List<ScheduleAnimeItem>> {
-        val map = mutableMapOf<Int, List<ScheduleAnimeItem>>()
-        list.forEach { dayItem ->
-            val dayName = dayItem.day?.trim()?.lowercase() ?: ""
-            val index = when {
-                dayName.contains("sun") || dayName.contains("minggu") || dayName.contains("min") -> 0
-                dayName.contains("mon") || dayName.contains("senin") || dayName.contains("sen") -> 1
-                dayName.contains("tue") || dayName.contains("selasa") || dayName.contains("sel") -> 2
-                dayName.contains("wed") || dayName.contains("rabu") || dayName.contains("rab") -> 3
-                dayName.contains("thu") || dayName.contains("kamis") || dayName.contains("kam") -> 4
-                dayName.contains("fri") || dayName.contains("jumat") || dayName.contains("jum") -> 5
-                dayName.contains("sat") || dayName.contains("sabtu") || dayName.contains("sab") -> 6
-                else -> -1
-            }
-            if (index in 0..6) {
-                map[index] = dayItem.animeList ?: emptyList()
-            }
-        }
-        return map
     }
 }

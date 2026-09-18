@@ -3,8 +3,11 @@ package com.prstyadev.wibufy.ui.genre
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.prstyadev.wibufy.data.AniListMedia
 import com.prstyadev.wibufy.data.AnimeItem
 import com.prstyadev.wibufy.data.DetailRepository
+import com.prstyadev.wibufy.data.GraphQLRequest
+import com.prstyadev.wibufy.data.HomeRepository
 import com.prstyadev.wibufy.data.JsonUtils
 import com.prstyadev.wibufy.data.RetrofitClient
 import kotlinx.coroutines.Dispatchers
@@ -270,12 +273,104 @@ class GenreViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun fetchAnimeFromApi(genreId: String, isMovie: Boolean, page: Int): List<AnimeItem> {
-        return if (isMovie) {
-            val response = RetrofitClient.apiService.getMovies(page = page, order = "update")
-            response.data?.animeList ?: emptyList()
+        val query = if (isMovie) {
+            """
+                query (${'$'}page: Int) {
+                  Page(page: ${'$'}page, perPage: 20) {
+                    pageInfo {
+                      hasNextPage
+                    }
+                    media(type: ANIME, format: MOVIE, sort: POPULARITY_DESC) {
+                      id
+                      title {
+                        romaji
+                        english
+                        native
+                        userPreferred
+                      }
+                      coverImage {
+                        extraLarge
+                        large
+                        medium
+                      }
+                      bannerImage
+                      episodes
+                      averageScore
+                      genres
+                      format
+                      status
+                      seasonYear
+                      description(asHtml: false)
+                    }
+                  }
+                }
+            """.trimIndent()
         } else {
-            val response = RetrofitClient.apiService.getAnimeByGenre(genreId = genreId, page = page)
-            response.data?.animeList ?: emptyList()
+            """
+                query (${'$'}genre: String, ${'$'}page: Int) {
+                  Page(page: ${'$'}page, perPage: 20) {
+                    pageInfo {
+                      hasNextPage
+                    }
+                    media(type: ANIME, genre: ${'$'}genre, sort: POPULARITY_DESC) {
+                      id
+                      title {
+                        romaji
+                        english
+                        native
+                        userPreferred
+                      }
+                      coverImage {
+                        extraLarge
+                        large
+                        medium
+                      }
+                      bannerImage
+                      episodes
+                      averageScore
+                      genres
+                      format
+                      status
+                      seasonYear
+                      description(asHtml: false)
+                    }
+                  }
+                }
+            """.trimIndent()
         }
+
+        // Format genre name for AniList (capitalize first letter, e.g. "action" -> "Action", "sci-fi" -> "Sci-Fi")
+        val cleanGenre = genreId
+            .replace("-", " ")
+            .split(" ")
+            .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
+            .replace("Sci Fi", "Sci-Fi")
+
+        val variables = if (isMovie) {
+            mapOf("page" to page)
+        } else {
+            mapOf("genre" to cleanGenre, "page" to page)
+        }
+
+        val request = GraphQLRequest(query = query, variables = variables)
+        val response = RetrofitClient.aniListService.getSearchData(request)
+        val mediaList = response.data?.Page?.media ?: emptyList()
+
+        // Populate detailMap immediately for instant synopsis and ratings
+        val summaries = mediaList.associate { media ->
+            val cleanSynopsis = media.description?.replace(Regex("<[^>]*>"), "")?.trim()
+            val ratingStr = media.averageScore?.let { String.format(java.util.Locale.US, "%.1f", it / 10.0) }
+            val epsStr = if (media.format == "MOVIE") "Movie" else "Eps ${media.episodes ?: 1}"
+            media.id.toString() to AnimeDetailSummary(
+                synopsis = cleanSynopsis,
+                episodeText = epsStr,
+                rating = ratingStr
+            )
+        }
+        if (summaries.isNotEmpty()) {
+            _uiState.update { it.copy(detailMap = it.detailMap + summaries) }
+        }
+
+        return mediaList.map { HomeRepository.mapAniListMediaToAnimeItem(it) }
     }
 }

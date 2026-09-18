@@ -137,6 +137,22 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                val currentQualityName = _uiState.value.currentQuality
+                val currentStream = _uiState.value.streamData
+                val currentItem = currentStream?.qualities?.find { it.quality == currentQualityName }
+                    ?: currentStream?.qualities?.firstOrNull()
+
+                if (!hasRetriedWithFallback && currentItem != null && !currentItem.url.isNullOrBlank() && currentItem.url != currentItem.rawUrl) {
+                    hasRetriedWithFallback = true
+                    try {
+                        // Direct CDN failed, fallback to VPS proxy URL
+                        loadMediaSource(currentItem.copy(rawUrl = null), currentStream)
+                        return
+                    } catch (e: Exception) {
+                        // continue to generic error
+                    }
+                }
+
                 val currentUrl = _uiState.value.currentQualityUrl
                 if (!hasRetriedWithFallback && !currentUrl.isNullOrBlank()) {
                     hasRetriedWithFallback = true
@@ -482,6 +498,7 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
             val cachedStream = streamCache[episodeSlug]
             if (cachedStream != null) {
                 val (qualityName, qualityUrl) = selectBestQuality(cachedStream)
+                val selectedItem = cachedStream.qualities?.find { it.quality == qualityName } ?: cachedStream.qualities?.firstOrNull()
                 val finalTitle = resolveCleanAnimeTitle(_uiState.value.animeTitle, cachedStream.title, episodeSlug)
                 val finalEpName = resolveCleanEpisodeName(_uiState.value.episodeName, cachedStream.title, episodeSlug)
                 _uiState.update {
@@ -494,18 +511,48 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
                         episodeName = finalEpName
                     )
                 }
-                loadMediaSource(qualityUrl)
+                loadMediaSource(selectedItem, cachedStream)
                 return@launch
             }
 
             try {
-                val response = RetrofitClient.apiService.getStreamEngine(episodeSlug)
-                val data = response.data
+                val data: StreamData? = if (episodeSlug.contains("::")) {
+                    val parts = episodeSlug.split("::")
+                    val provider = parts[0]
+                    val epId = parts.drop(1).joinToString("::")
+                    val watchRes = RetrofitClient.reconsumetService.getWatchSources(provider = provider, episodeId = epId)
+                    val server = watchRes.sub?.firstOrNull() ?: watchRes.dub?.firstOrNull()
+                    val sources = server?.sources ?: emptyList()
+                    val qualityItems = sources.map { src ->
+                        QualityItem(
+                            quality = src.quality ?: "Auto",
+                            provider = provider,
+                            type = if (src.isM3U8 == true) "m3u8" else "mp4",
+                            url = src.url,
+                            rawUrl = src.rawUrl,
+                            headers = server?.headers
+                        )
+                    }
+
+                    StreamData(
+                        title = null,
+                        episodeSlug = episodeSlug,
+                        defaultQuality = qualityItems.firstOrNull()?.quality ?: "Auto",
+                        qualities = qualityItems,
+                        subtitles = server?.subtitles,
+                        headers = server?.headers
+                    )
+                } else {
+                    val response = RetrofitClient.apiService.getStreamEngine(episodeSlug)
+                    response.data
+                }
+
                 if (data != null) {
                     streamCache[episodeSlug] = data
                 }
 
                 val (qualityName, qualityUrl) = selectBestQuality(data)
+                val selectedItem = data?.qualities?.find { it.quality == qualityName } ?: data?.qualities?.firstOrNull()
                 val finalTitle = resolveCleanAnimeTitle(_uiState.value.animeTitle, data?.title, episodeSlug)
                 val finalEpName = resolveCleanEpisodeName(_uiState.value.episodeName, data?.title, episodeSlug)
 
@@ -519,7 +566,7 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
                         episodeName = finalEpName
                     )
                 }
-                loadMediaSource(qualityUrl)
+                loadMediaSource(selectedItem, data)
             } catch (e: UnknownHostException) {
                 _uiState.update { it.copy(isLoading = false, error = "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.") }
             } catch (e: IOException) {
@@ -530,46 +577,68 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    private fun loadMediaSource(url: String?) {
-        if (url.isNullOrBlank()) return
+    private fun loadMediaSource(qualityItem: QualityItem?, streamData: StreamData? = null) {
+        val targetUrl = qualityItem?.rawUrl?.takeIf { it.isNotBlank() } ?: qualityItem?.url
+        if (targetUrl.isNullOrBlank()) return
 
-        val uri = Uri.parse(url)
-        val host = uri.host?.lowercase() ?: ""
-        val isBloggerDomain = host.contains("blogger") || host.contains("blogspot") || host.contains("googleusercontent")
-        val referer = if (isBloggerDomain || host.isEmpty()) "https://www.blogger.com/" else "${uri.scheme ?: "https"}://$host/"
-        val origin = if (isBloggerDomain || host.isEmpty()) "https://www.blogger.com" else "${uri.scheme ?: "https"}://$host"
+        val headers = qualityItem?.headers ?: streamData?.headers ?: emptyMap()
+        val referer = headers["Referer"] ?: headers["referer"] ?: run {
+            val uri = Uri.parse(targetUrl)
+            val host = uri.host?.lowercase() ?: ""
+            val isBloggerDomain = host.contains("blogger") || host.contains("blogspot") || host.contains("googleusercontent")
+            if (isBloggerDomain || host.isEmpty()) "https://www.blogger.com/" else "${uri.scheme ?: "https"}://$host/"
+        }
+        val origin = headers["Origin"] ?: headers["origin"] ?: referer.removeSuffix("/")
+        val userAgent = headers["User-Agent"] ?: headers["user-agent"] ?: USER_AGENT
+
+        val requestProperties = mutableMapOf(
+            "Referer" to referer,
+            "Origin" to origin,
+            "User-Agent" to userAgent
+        )
+        headers.forEach { (k, v) ->
+            if (!k.equals("Referer", true) && !k.equals("Origin", true) && !k.equals("User-Agent", true)) {
+                requestProperties[k] = v
+            }
+        }
 
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
-            .setUserAgent(USER_AGENT)
+            .setUserAgent(userAgent)
             .setConnectTimeoutMs(20000)
             .setReadTimeoutMs(20000)
-            .setDefaultRequestProperties(
-                mapOf(
-                    "Referer" to referer,
-                    "Origin" to origin,
-                    "User-Agent" to USER_AGENT
-                )
-            )
+            .setDefaultRequestProperties(requestProperties)
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
         val defaultMediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
 
-        val isHls = url.contains("m3u8", ignoreCase = true) || url.contains("hls", ignoreCase = true)
-        val isDash = url.contains("mpd", ignoreCase = true) || url.contains("dash", ignoreCase = true)
+        val isHls = targetUrl.contains("m3u8", ignoreCase = true) || targetUrl.contains("hls", ignoreCase = true)
+        val isDash = targetUrl.contains("mpd", ignoreCase = true) || targetUrl.contains("dash", ignoreCase = true)
 
-        val mediaItem = when {
-            isHls -> MediaItem.Builder()
-                .setUri(url)
-                .setMimeType(MimeTypes.APPLICATION_M3U8)
-                .build()
-            isDash -> MediaItem.Builder()
-                .setUri(url)
-                .setMimeType(MimeTypes.APPLICATION_MPD)
-                .build()
-            else -> MediaItem.fromUri(url)
+        val mediaItemBuilder = MediaItem.Builder().setUri(targetUrl)
+
+        if (isHls) {
+            mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
+        } else if (isDash) {
+            mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_MPD)
         }
 
+        val subs = streamData?.subtitles ?: qualityItem?.headers?.let { null }
+        if (!subs.isNullOrEmpty()) {
+            val subtitleConfigs = subs.mapNotNull { sub ->
+                val subUrl = sub.url ?: return@mapNotNull null
+                MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
+                    .setMimeType(MimeTypes.TEXT_VTT)
+                    .setLanguage(sub.lang ?: "id")
+                    .setSelectionFlags(if (sub.lang?.contains("Indo", true) == true) C.SELECTION_FLAG_DEFAULT else 0)
+                    .build()
+            }
+            if (subtitleConfigs.isNotEmpty()) {
+                mediaItemBuilder.setSubtitleConfigurations(subtitleConfigs)
+            }
+        }
+
+        val mediaItem = mediaItemBuilder.build()
         val mediaSource = defaultMediaSourceFactory.createMediaSource(mediaItem)
 
         exoPlayer.stop()
@@ -641,7 +710,7 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
                 currentQualityUrl = url
             )
         }
-        loadMediaSource(url)
+        loadMediaSource(qualityItem, _uiState.value.streamData)
         if (currentPos > 0) {
             exoPlayer.seekTo(currentPos)
         }

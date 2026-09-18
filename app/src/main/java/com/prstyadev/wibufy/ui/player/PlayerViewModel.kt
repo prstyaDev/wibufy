@@ -244,8 +244,37 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 ) 
             }
             try {
-                val response = RetrofitClient.apiService.getStreamEngine(episodeSlug)
-                val data = response.data
+                val data: StreamData? = if (episodeSlug.contains("::")) {
+                    val parts = episodeSlug.split("::")
+                    val provider = parts[0]
+                    val epId = parts.drop(1).joinToString("::")
+                    val watchRes = RetrofitClient.reconsumetService.getWatchSources(provider = provider, episodeId = epId)
+                    val server = watchRes.sub?.firstOrNull() ?: watchRes.dub?.firstOrNull()
+                    val sources = server?.sources ?: emptyList()
+                    val qualityItems = sources.map { src ->
+                        QualityItem(
+                            quality = src.quality ?: "Auto",
+                            provider = provider,
+                            type = if (src.isM3U8 == true) "m3u8" else "mp4",
+                            url = src.url,
+                            rawUrl = src.rawUrl,
+                            headers = server?.headers
+                        )
+                    }
+
+                    StreamData(
+                        title = null,
+                        episodeSlug = episodeSlug,
+                        defaultQuality = qualityItems.firstOrNull()?.quality ?: "Auto",
+                        qualities = qualityItems,
+                        subtitles = server?.subtitles,
+                        headers = server?.headers
+                    )
+                } else {
+                    val response = RetrofitClient.apiService.getStreamEngine(episodeSlug)
+                    response.data
+                }
+
                 if (data != null) {
                     streamCache[episodeSlug] = data
                 }
