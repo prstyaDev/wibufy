@@ -676,6 +676,7 @@ fun VideoPlayerScreen(
                             playbackSpeed = uiState.playbackSpeed,
                             isFullscreen = isFullscreen,
                             isAutonextEnabled = uiState.isAutonextEnabled,
+                            isLoading = uiState.isLoading,
                             isBuffering = uiState.isBuffering,
                             isPlaying = uiState.isPlaying,
                             currentPositionMs = uiState.currentPositionMs,
@@ -732,7 +733,7 @@ fun VideoPlayerScreen(
             }
         }
 
-    // Resolution BottomSheet Picker
+    // Resolution BottomSheet Picker (Directly populated from ExoPlayer Track Selection)
     if (showQualityBottomSheet) {
         ModalBottomSheet(
             onDismissRequest = { showQualityBottomSheet = false },
@@ -746,14 +747,28 @@ fun VideoPlayerScreen(
                     color = Color.White
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                uiState.streamData?.qualities?.forEach { quality ->
-                    val isSelected = quality.quality.equals(uiState.currentQuality, ignoreCase = true) ||
-                            (quality.url != null && quality.url == uiState.currentQualityUrl)
+
+                // Always display full manual selector: Auto, 1080p, 720p, 480p, 360p
+                val videoQualities = uiState.availableVideoQualities.ifEmpty { VideoQualityOption.DEFAULT_SELECTOR_OPTIONS }
+                val currQuality = uiState.currentQuality
+                val selOptionId = uiState.selectedQualityOptionId
+                videoQualities.forEach { option ->
+                    val isSelected = when {
+                        !selOptionId.isNullOrEmpty() -> {
+                            option.id.equals(selOptionId, ignoreCase = true)
+                        }
+                        option.isAuto -> {
+                            currQuality.isNullOrEmpty() || currQuality.contains("auto", ignoreCase = true)
+                        }
+                        else -> {
+                            currQuality?.contains("${option.height}", ignoreCase = true) == true
+                        }
+                    }
                     ListItem(
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         headlineContent = {
                             Text(
-                                text = quality.quality ?: "Unknown",
+                                text = option.label,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 color = if (isSelected) Color(0xFFFDD734) else Color.White
                             )
@@ -770,7 +785,7 @@ fun VideoPlayerScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable {
-                                viewModel.changeQuality(quality)
+                                viewModel.setVideoQualityOption(option)
                                 showQualityBottomSheet = false
                             }
                     )
@@ -1884,6 +1899,7 @@ fun CustomVideoPlayer(
     playbackSpeed: Float,
     isFullscreen: Boolean,
     isAutonextEnabled: Boolean,
+    isLoading: Boolean = false,
     isBuffering: Boolean,
     isPlaying: Boolean,
     currentPositionMs: Long,
@@ -1920,7 +1936,7 @@ fun CustomVideoPlayer(
         }
     }
 
-    var showControls by remember { mutableStateOf(true) }
+    var showControls by remember { mutableStateOf(false) }
     var isDraggingScrubber by remember { mutableStateOf(false) }
     var dragProgressMs by remember { mutableLongStateOf(0L) }
     var showDoubleTapRewind by remember { mutableStateOf(false) }
@@ -1948,6 +1964,13 @@ fun CustomVideoPlayer(
     LaunchedEffect(showControls, isPlaying, isDraggingScrubber) {
         if (showControls && isPlaying && !isDraggingScrubber) {
             delay(4000L)
+            showControls = false
+        }
+    }
+
+    // Dismiss controls immediately when buffering or loading starts
+    LaunchedEffect(isBuffering, isLoading) {
+        if (isBuffering || isLoading) {
             showControls = false
         }
     }
@@ -2119,9 +2142,9 @@ fun CustomVideoPlayer(
             }
         }
 
-        // Custom Overlay UI
+        // Custom Overlay UI (Hidden when buffering or loading so it doesn't cover spinner)
         AnimatedVisibility(
-            visible = showControls && !isMiniPlayer && controlsAlpha > 0.15f,
+            visible = showControls && !isMiniPlayer && !isLoading && !isBuffering && controlsAlpha > 0.15f,
             enter = fadeIn(animationSpec = tween(300)),
             exit = fadeOut(animationSpec = tween(300)),
             modifier = Modifier.graphicsLayer { alpha = controlsAlpha }

@@ -12,6 +12,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -67,7 +69,9 @@ data class GlobalPlayerUiState(
     val hasNextEpisode: Boolean = false,
     val synopsis: String? = null,
     val animeId: String? = null,
-    val isBookmarked: Boolean = false
+    val isBookmarked: Boolean = false,
+    val availableVideoQualities: List<VideoQualityOption> = VideoQualityOption.DEFAULT_SELECTOR_OPTIONS,
+    val selectedQualityOptionId: String = "auto"
 )
 
 @OptIn(UnstableApi::class)
@@ -136,18 +140,44 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
                 _uiState.update { it.copy(isPlaying = playing) }
             }
 
+            override fun onTracksChanged(tracks: Tracks) {
+                updateAvailableTracks(tracks)
+            }
+
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                // If in Auto mode, update displayed quality label to reflect active standard resolution
+                if (_uiState.value.selectedQualityOptionId == "auto" && videoSize.height > 0) {
+                    val h = videoSize.height
+                    val displayQuality = when {
+                        h >= 1000 -> "1080p"
+                        h in 850..950 -> "1080p" // 1600x900 or 900p stream presentation
+                        h in 680..780 -> "720p"
+                        h in 440..540 -> "480p"
+                        h in 320..400 -> "360p"
+                        else -> "${h}p"
+                    }
+                    val label = "$displayQuality (Auto)"
+                    _uiState.update { it.copy(currentQuality = label) }
+                }
+            }
+
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 val currentQualityName = _uiState.value.currentQuality
                 val currentStream = _uiState.value.streamData
                 val currentItem = currentStream?.qualities?.find { it.quality == currentQualityName }
                     ?: currentStream?.qualities?.firstOrNull()
 
-                if (!hasRetriedWithFallback && currentItem != null && !currentItem.url.isNullOrBlank() && currentItem.url != currentItem.rawUrl) {
+                if (!hasRetriedWithFallback && currentItem != null) {
                     hasRetriedWithFallback = true
                     try {
-                        // Direct CDN failed, fallback to VPS proxy URL
-                        loadMediaSource(currentItem.copy(rawUrl = null), currentStream)
-                        return
+                        // Fallback between rawUrl and proxy url
+                        val fallbackItem = if (!currentItem.rawUrl.isNullOrBlank() && currentItem.rawUrl != currentItem.url) {
+                            currentItem.copy(url = currentItem.rawUrl, rawUrl = null)
+                        } else null
+                        if (fallbackItem != null) {
+                            loadMediaSource(fallbackItem, currentStream)
+                            return
+                        }
                     } catch (e: Exception) {
                         // continue to generic error
                     }
@@ -524,8 +554,19 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
                     val server = watchRes.sub?.firstOrNull() ?: watchRes.dub?.firstOrNull()
                     val sources = server?.sources ?: emptyList()
                     val qualityItems = sources.map { src ->
+                        val rawQ = src.quality?.trim() ?: "Auto"
+                        val normalizedQuality = when {
+                            rawQ.equals("auto", ignoreCase = true) -> "Auto"
+                            rawQ.equals("900", ignoreCase = true) -> "1080p"
+                            rawQ.contains("1080") -> "1080p"
+                            rawQ.contains("720") -> "720p"
+                            rawQ.contains("480") -> "480p"
+                            rawQ.contains("360") -> "360p"
+                            rawQ.endsWith("p", ignoreCase = true) -> rawQ
+                            else -> "${rawQ}p"
+                        }
                         QualityItem(
-                            quality = src.quality ?: "Auto",
+                            quality = normalizedQuality,
                             provider = provider,
                             type = if (src.isM3U8 == true) "m3u8" else "mp4",
                             url = src.url,
@@ -578,7 +619,8 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun loadMediaSource(qualityItem: QualityItem?, streamData: StreamData? = null) {
-        val targetUrl = qualityItem?.rawUrl?.takeIf { it.isNotBlank() } ?: qualityItem?.url
+        // Always prefer url (proxy url) over rawUrl for reliability since direct CDNs (e.g. vidmoly/blogger) often 403
+        val targetUrl = qualityItem?.url?.takeIf { it.isNotBlank() } ?: qualityItem?.rawUrl
         if (targetUrl.isNullOrBlank()) return
 
         val headers = qualityItem?.headers ?: streamData?.headers ?: emptyMap()
@@ -695,6 +737,133 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
         }
         exoPlayer.seekTo(target)
         _uiState.update { it.copy(currentPositionMs = target) }
+    }
+
+    private fun updateAvailableTracks(tracks: Tracks) {
+        // Collect detected video formats from ExoPlayer
+        val detectedMap = mutableMapOf<Int, VideoQualityOption>()
+        for (group in tracks.groups) {
+            if (group.type == C.TRACK_TYPE_VIDEO) {
+                for (i in 0 until group.length) {
+                    if (group.isTrackSupported(i)) {
+                        val format = group.getTrackFormat(i)
+                        val h = format.height
+                        val w = format.width
+                        if (h > 0) {
+                            val label = when {
+                                h >= 1080 -> "1080p (FHD)"
+                                h >= 720 -> "720p (HD)"
+                                h >= 480 -> "480p (SD)"
+                                h >= 360 -> "360p (Hemat Data)"
+                                else -> "${h}p"
+                            }
+                            detectedMap[h] = VideoQualityOption(
+                                id = "${h}p",
+                                label = label,
+                                height = h,
+                                width = w,
+                                bitrate = format.bitrate
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Standard user-facing manual selector list: Auto, 1080p, 720p, 480p, 360p
+        val standardPresets = listOf(
+            VideoQualityOption(id = "auto", label = "Auto", isAuto = true),
+            detectedMap[1080] ?: detectedMap[900]?.copy(id = "1080p", label = "1080p (FHD)") ?: VideoQualityOption(id = "1080p", label = "1080p (FHD)", height = 1080),
+            detectedMap[720] ?: VideoQualityOption(id = "720p", label = "720p (HD)", height = 720),
+            detectedMap[480] ?: VideoQualityOption(id = "480p", label = "480p (SD)", height = 480),
+            detectedMap[360] ?: VideoQualityOption(id = "360p", label = "360p (Hemat Data)", height = 360)
+        )
+
+        _uiState.update {
+            val currentSelectedId = it.selectedQualityOptionId
+            val activeLabel = if (currentSelectedId == "auto") {
+                it.currentQuality ?: "Auto"
+            } else {
+                standardPresets.find { opt -> opt.id.equals(currentSelectedId, ignoreCase = true) }?.label ?: it.currentQuality ?: "Auto"
+            }
+            it.copy(
+                availableVideoQualities = standardPresets,
+                currentQuality = activeLabel
+            )
+        }
+
+        // Apply saved preference if matched
+        val saved = getSavedQuality()
+        if (!saved.isNullOrEmpty() && saved != "auto") {
+            val match = standardPresets.find { it.id.equals(saved, ignoreCase = true) || it.label.startsWith(saved, ignoreCase = true) }
+            if (match != null && _uiState.value.selectedQualityOptionId != match.id) {
+                setVideoQualityOption(match)
+            }
+        }
+    }
+
+    fun setVideoQualityOption(option: VideoQualityOption) {
+        saveQualityPreference(option.id)
+        if (option.isAuto) {
+            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                .buildUpon()
+                .clearVideoSizeConstraints()
+                .build()
+            _uiState.update {
+                it.copy(
+                    selectedQualityOptionId = "auto",
+                    currentQuality = "Auto"
+                )
+            }
+        } else {
+            // Also check if streamData has an explicit stream URL for this quality (e.g. 720p or 480p mp4/m3u8)
+            val streamQualities = _uiState.value.streamData?.qualities ?: emptyList()
+            val matchingStreamQuality = streamQualities.find { item ->
+                val q = item.quality?.lowercase() ?: ""
+                when (option.height) {
+                    1080 -> q.contains("1080") || q.contains("900") || q.contains("fullhd") || q.contains("fhd")
+                    720 -> q.contains("720") || q.contains("mp4hd") || q.contains("hd")
+                    480 -> q.contains("480") || q.contains("sd")
+                    360 -> q.contains("360")
+                    else -> q.contains("${option.height}")
+                }
+            }
+
+            val targetQualityUrl = matchingStreamQuality?.url ?: matchingStreamQuality?.rawUrl
+            if (matchingStreamQuality != null && !targetQualityUrl.isNullOrBlank() && targetQualityUrl != _uiState.value.currentQualityUrl) {
+                changeQuality(matchingStreamQuality)
+                _uiState.update {
+                    it.copy(
+                        selectedQualityOptionId = option.id,
+                        currentQuality = "${option.height}p"
+                    )
+                }
+            } else {
+                // Constrain video size on current ExoPlayer track selector
+                val targetHeight = if (option.height == 1080 && exoPlayer.currentTracks.groups.any { g ->
+                    (0 until g.length).any { i -> g.getTrackFormat(i).height in 850..950 } &&
+                    !(0 until g.length).any { i -> g.getTrackFormat(i).height >= 1000 }
+                }) {
+                    900 // Adapt to 900p master streams when user chooses 1080p
+                } else {
+                    option.height
+                }
+
+                val maxW = if (option.width > 0) option.width else Int.MAX_VALUE
+                val minW = if (option.width > 0) option.width else 0
+                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                    .buildUpon()
+                    .setMaxVideoSize(maxW, targetHeight)
+                    .setMinVideoSize(minW, targetHeight)
+                    .build()
+                _uiState.update {
+                    it.copy(
+                        selectedQualityOptionId = option.id,
+                        currentQuality = "${option.height}p"
+                    )
+                }
+            }
+        }
     }
 
     fun changeQuality(qualityItem: QualityItem) {

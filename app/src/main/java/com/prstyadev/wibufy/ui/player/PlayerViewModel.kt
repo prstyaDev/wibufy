@@ -252,8 +252,19 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                     val server = watchRes.sub?.firstOrNull() ?: watchRes.dub?.firstOrNull()
                     val sources = server?.sources ?: emptyList()
                     val qualityItems = sources.map { src ->
+                        val rawQ = src.quality?.trim() ?: "Auto"
+                        val normalizedQuality = when {
+                            rawQ.equals("auto", ignoreCase = true) -> "Auto"
+                            rawQ.equals("900", ignoreCase = true) -> "1080p"
+                            rawQ.contains("1080") -> "1080p"
+                            rawQ.contains("720") -> "720p"
+                            rawQ.contains("480") -> "480p"
+                            rawQ.contains("360") -> "360p"
+                            rawQ.endsWith("p", ignoreCase = true) -> rawQ
+                            else -> "${rawQ}p"
+                        }
                         QualityItem(
-                            quality = src.quality ?: "Auto",
+                            quality = normalizedQuality,
                             provider = provider,
                             type = if (src.isM3U8 == true) "m3u8" else "mp4",
                             url = src.url,
