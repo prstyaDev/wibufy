@@ -96,6 +96,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -159,6 +160,8 @@ fun VideoPlayerScreen(
     var commentInputText by remember { mutableStateOf("") }
     var showQualityBottomSheet by remember { mutableStateOf(false) }
     var showSpeedBottomSheet by remember { mutableStateOf(false) }
+    var showSubtitleBottomSheet by remember { mutableStateOf(false) }
+    var showServerBottomSheet by remember { mutableStateOf(false) }
     var showDownloadBottomSheet by remember { mutableStateOf(false) }
     var showAllEpisodesBottomSheet by remember { mutableStateOf(false) }
 
@@ -685,6 +688,12 @@ fun VideoPlayerScreen(
                             onToggleAutonext = { viewModel.toggleAutonext() },
                             onOpenQualityPicker = { showQualityBottomSheet = true },
                             onOpenSpeedPicker = { showSpeedBottomSheet = true },
+                            isSubtitleEnabled = uiState.isSubtitleEnabled,
+                            selectedSubtitleLang = uiState.selectedSubtitleLang,
+                            onOpenSubtitlePicker = { showSubtitleBottomSheet = true },
+                            hasMultipleServers = uiState.availableServers.size > 1,
+                            selectedServerIndex = uiState.selectedServerIndex,
+                            onOpenServerPicker = { showServerBottomSheet = true },
                             onToggleFullscreen = { isFullscreen = !isFullscreen },
                             onNavigateBack = {
                                 if (isFullscreen) {
@@ -836,6 +845,225 @@ fun VideoPlayerScreen(
                             .clickable {
                                 viewModel.setPlaybackSpeed(speed)
                                 showSpeedBottomSheet = false
+                            }
+                    )
+                }
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+    }
+
+    // Subtitle BottomSheet Picker (AI Subtitle & Language Selection)
+    if (showSubtitleBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSubtitleBottomSheet = false },
+            containerColor = Color(0xFF1E1F23)
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Rounded.Subtitles,
+                        contentDescription = null,
+                        tint = Color(0xFFFDD734),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Subtitle & Bahasa",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Pilih bahasa subtitle teks untuk episode ini",
+                    fontSize = 13.sp,
+                    color = Color(0xFF9E9E9E)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Option: Nonaktifkan Subtitle (Off)
+                val isOff = !uiState.isSubtitleEnabled || uiState.selectedSubtitleLang == null
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
+                        Text(
+                            text = "Nonaktifkan Subtitle",
+                            fontWeight = if (isOff) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isOff) Color(0xFFFDD734) else Color.White
+                        )
+                    },
+                    trailingContent = {
+                        if (isOff) {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = "Aktif",
+                                tint = Color(0xFFFDD734)
+                            )
+                        }
+                    },
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            viewModel.selectSubtitle(null)
+                            showSubtitleBottomSheet = false
+                        }
+                )
+
+                val availableSubs = uiState.availableSubtitles
+                if (availableSubs.isNotEmpty()) {
+                    availableSubs.forEach { sub ->
+                        val isIndo = sub.lang?.contains("Indonesian", ignoreCase = true) == true
+                        val isSelected = uiState.isSubtitleEnabled && (
+                            uiState.selectedSubtitleLang.equals(sub.lang, ignoreCase = true) ||
+                            (isIndo && uiState.selectedSubtitleLang?.contains("Indonesian", ignoreCase = true) == true)
+                        )
+                        val displayLabel = sub.lang ?: "Subtitle"
+
+                        ListItem(
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            headlineContent = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = displayLabel,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) Color(0xFFFDD734) else Color.White
+                                    )
+                                    if (isIndo) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Surface(
+                                            color = Color(0xFFFDD734).copy(alpha = 0.2f),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                text = "Gemini AI",
+                                                color = Color(0xFFFDD734),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            supportingContent = {
+                                if (isIndo) {
+                                    Text(
+                                        text = "Terjemahan otomatis Bahasa Indonesia alami",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF9E9E9E)
+                                    )
+                                }
+                            },
+                            trailingContent = {
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = "Aktif",
+                                        tint = Color(0xFFFDD734)
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    viewModel.selectSubtitle(sub)
+                                    showSubtitleBottomSheet = false
+                                }
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Tidak ada subtitle eksternal untuk server ini (video mungkin RAW atau hardsub).",
+                            color = Color(0xFF9E9E9E),
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+    }
+
+    // Server BottomSheet Picker
+    if (showServerBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showServerBottomSheet = false },
+            containerColor = Color(0xFF1E1F23)
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Rounded.Storage,
+                        contentDescription = null,
+                        tint = Color(0xFFFDD734),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Pilih Server Video",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Ganti server jika pemutaran lambat atau ingin mencoba sumber subtitle lain",
+                    fontSize = 13.sp,
+                    color = Color(0xFF9E9E9E)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                uiState.availableServers.forEachIndexed { index, srv ->
+                    val isSelected = (index == uiState.selectedServerIndex)
+                    val srvName = srv.serverName ?: "Server ${index + 1}"
+                    val hasSub = !srv.subtitles.isNullOrEmpty()
+                    val subSummary = if (hasSub) {
+                        val hasIndo = srv.subtitles?.any { it.lang?.contains("Indonesian", true) == true } == true
+                        if (hasIndo) "Subtitle: Tersedia (Indonesian AI)" else "Subtitle: Tersedia (${srv.subtitles?.size} bahasa)"
+                    } else {
+                        "Subtitle: Tidak tersedia (Hardsub/RAW)"
+                    }
+
+                    ListItem(
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        headlineContent = {
+                            Text(
+                                text = srvName,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                color = if (isSelected) Color(0xFFFDD734) else Color.White
+                            )
+                        },
+                        supportingContent = {
+                            Text(
+                                text = subSummary,
+                                fontSize = 12.sp,
+                                color = if (isSelected) Color(0xFFFDD734).copy(alpha = 0.8f) else Color(0xFF9E9E9E)
+                            )
+                        },
+                        trailingContent = {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Check,
+                                    contentDescription = "Aktif",
+                                    tint = Color(0xFFFDD734)
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                viewModel.selectServer(index)
+                                showServerBottomSheet = false
                             }
                     )
                 }
@@ -1908,6 +2136,12 @@ fun CustomVideoPlayer(
     onToggleAutonext: () -> Unit,
     onOpenQualityPicker: () -> Unit,
     onOpenSpeedPicker: () -> Unit,
+    isSubtitleEnabled: Boolean = true,
+    selectedSubtitleLang: String? = null,
+    onOpenSubtitlePicker: () -> Unit = {},
+    hasMultipleServers: Boolean = false,
+    selectedServerIndex: Int = 0,
+    onOpenServerPicker: () -> Unit = {},
     onToggleFullscreen: () -> Unit,
     onNavigateBack: () -> Unit,
     onNavigatePrevious: () -> Unit,
@@ -2015,11 +2249,35 @@ fun CustomVideoPlayer(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
+                    val captionStyle = CaptionStyleCompat(
+                        android.graphics.Color.WHITE,
+                        android.graphics.Color.TRANSPARENT,
+                        android.graphics.Color.TRANSPARENT,
+                        CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW,
+                        android.graphics.Color.BLACK,
+                        android.graphics.Typeface.SANS_SERIF
+                    )
+                    subtitleView?.apply {
+                        setStyle(captionStyle)
+                        setFractionalTextSize(0.045f)
+                    }
                 }
             },
             update = { playerView ->
                 if (playerView.player != exoPlayer) {
                     playerView.player = exoPlayer
+                }
+                val captionStyle = CaptionStyleCompat(
+                    android.graphics.Color.WHITE,
+                    android.graphics.Color.TRANSPARENT,
+                    android.graphics.Color.TRANSPARENT,
+                    CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW,
+                    android.graphics.Color.BLACK,
+                    android.graphics.Typeface.SANS_SERIF
+                )
+                playerView.subtitleView?.apply {
+                    setStyle(captionStyle)
+                    setFractionalTextSize(0.045f)
                 }
             },
             onRelease = { playerView ->
@@ -2381,6 +2639,66 @@ fun CustomVideoPlayer(
                                     .clickable { onOpenSpeedPicker() }
                                     .padding(horizontal = 4.dp, vertical = 2.dp)
                             )
+
+                            // Server Switcher Button (when multiple servers exist)
+                            if (hasMultipleServers) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable { onOpenServerPicker() }
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Storage,
+                                        contentDescription = "Pilih Server",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "S${selectedServerIndex + 1}",
+                                        style = TextStyle(
+                                            color = Color.White,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            shadow = overlayTextShadow
+                                        )
+                                    )
+                                }
+                            }
+
+                            // Subtitle Picker Button
+                            val subLabel = when {
+                                !isSubtitleEnabled || selectedSubtitleLang.isNullOrBlank() -> "CC Off"
+                                selectedSubtitleLang.contains("Indonesian", ignoreCase = true) -> "ID (AI)"
+                                else -> selectedSubtitleLang.take(2).uppercase()
+                            }
+                            val subActive = isSubtitleEnabled && !selectedSubtitleLang.isNullOrBlank()
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable { onOpenSubtitlePicker() }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Subtitles,
+                                    contentDescription = "Pilih Subtitle",
+                                    tint = if (subActive) Color(0xFFFDD734) else Color.White.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = subLabel,
+                                    style = TextStyle(
+                                        color = if (subActive) Color(0xFFFDD734) else Color.White.copy(alpha = 0.5f),
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        shadow = overlayTextShadow
+                                    )
+                                )
+                            }
 
                             IconButton(
                                 onClick = onToggleFullscreen,

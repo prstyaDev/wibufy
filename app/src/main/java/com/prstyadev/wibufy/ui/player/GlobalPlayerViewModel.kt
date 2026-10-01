@@ -25,6 +25,8 @@ import com.prstyadev.wibufy.data.BookmarkEntity
 import com.prstyadev.wibufy.data.EpisodeItem
 import com.prstyadev.wibufy.data.JsonUtils
 import com.prstyadev.wibufy.data.QualityItem
+import com.prstyadev.wibufy.data.ReconsumetServer
+import com.prstyadev.wibufy.data.ReconsumetSubtitle
 import com.prstyadev.wibufy.data.RetrofitClient
 import com.prstyadev.wibufy.data.StreamData
 import com.prstyadev.wibufy.data.WatchHistoryRepository
@@ -71,7 +73,12 @@ data class GlobalPlayerUiState(
     val animeId: String? = null,
     val isBookmarked: Boolean = false,
     val availableVideoQualities: List<VideoQualityOption> = VideoQualityOption.DEFAULT_SELECTOR_OPTIONS,
-    val selectedQualityOptionId: String = "auto"
+    val selectedQualityOptionId: String = "auto",
+    val availableSubtitles: List<ReconsumetSubtitle> = emptyList(),
+    val selectedSubtitleLang: String? = null,
+    val isSubtitleEnabled: Boolean = true,
+    val availableServers: List<ReconsumetServer> = emptyList(),
+    val selectedServerIndex: Int = 0
 )
 
 @OptIn(UnstableApi::class)
@@ -531,6 +538,9 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
                 val selectedItem = cachedStream.qualities?.find { it.quality == qualityName } ?: cachedStream.qualities?.firstOrNull()
                 val finalTitle = resolveCleanAnimeTitle(_uiState.value.animeTitle, cachedStream.title, episodeSlug)
                 val finalEpName = resolveCleanEpisodeName(_uiState.value.episodeName, cachedStream.title, episodeSlug)
+                val cachedSubs = cachedStream.subtitles.orEmpty()
+                val cachedIndoSub = cachedSubs.find { it.lang?.contains("Indonesian", ignoreCase = true) == true }?.lang
+                    ?: cachedSubs.firstOrNull()?.lang
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -538,7 +548,10 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
                         currentQuality = qualityName,
                         currentQualityUrl = qualityUrl,
                         animeTitle = finalTitle,
-                        episodeName = finalEpName
+                        episodeName = finalEpName,
+                        availableSubtitles = cachedSubs,
+                        selectedSubtitleLang = cachedIndoSub,
+                        isSubtitleEnabled = cachedSubs.isNotEmpty()
                     )
                 }
                 loadMediaSource(selectedItem, cachedStream)
@@ -546,12 +559,14 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
             }
 
             try {
+                var allServers: List<ReconsumetServer> = emptyList()
                 val data: StreamData? = if (episodeSlug.contains("::")) {
                     val parts = episodeSlug.split("::")
                     val provider = parts[0]
                     val epId = parts.drop(1).joinToString("::")
                     val watchRes = RetrofitClient.reconsumetService.getWatchSources(provider = provider, episodeId = epId)
-                    val server = watchRes.sub?.firstOrNull() ?: watchRes.dub?.firstOrNull()
+                    allServers = (watchRes.sub.orEmpty() + watchRes.dub.orEmpty())
+                    val server = allServers.firstOrNull()
                     val sources = server?.sources ?: emptyList()
                     val qualityItems = sources.map { src ->
                         val rawQ = src.quality?.trim() ?: "Auto"
@@ -567,7 +582,7 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
                         }
                         QualityItem(
                             quality = normalizedQuality,
-                            provider = provider,
+                            provider = server?.serverName ?: provider,
                             type = if (src.isM3U8 == true) "m3u8" else "mp4",
                             url = src.url,
                             rawUrl = src.rawUrl,
@@ -596,6 +611,9 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
                 val selectedItem = data?.qualities?.find { it.quality == qualityName } ?: data?.qualities?.firstOrNull()
                 val finalTitle = resolveCleanAnimeTitle(_uiState.value.animeTitle, data?.title, episodeSlug)
                 val finalEpName = resolveCleanEpisodeName(_uiState.value.episodeName, data?.title, episodeSlug)
+                val subs = data?.subtitles.orEmpty()
+                val defaultSubLang = subs.find { it.lang?.contains("Indonesian", ignoreCase = true) == true }?.lang
+                    ?: subs.firstOrNull()?.lang
 
                 _uiState.update {
                     it.copy(
@@ -604,7 +622,12 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
                         currentQuality = qualityName,
                         currentQualityUrl = qualityUrl,
                         animeTitle = finalTitle,
-                        episodeName = finalEpName
+                        episodeName = finalEpName,
+                        availableSubtitles = subs,
+                        selectedSubtitleLang = defaultSubLang,
+                        isSubtitleEnabled = subs.isNotEmpty(),
+                        availableServers = allServers,
+                        selectedServerIndex = 0
                     )
                 }
                 loadMediaSource(selectedItem, data)
@@ -615,6 +638,28 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = e.message ?: "Terjadi kesalahan saat memuat video") }
             }
+        }
+    }
+
+    private fun buildSubtitleConfigurations(subtitles: List<ReconsumetSubtitle>): List<MediaItem.SubtitleConfiguration> {
+        if (subtitles.isEmpty()) return emptyList()
+        val hasIndonesian = subtitles.any { it.lang?.contains("Indonesian", ignoreCase = true) == true }
+
+        return subtitles.mapNotNull { track ->
+            val subUrl = track.url?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val isIndo = track.lang?.contains("Indonesian", ignoreCase = true) == true
+            MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
+                .setMimeType(MimeTypes.TEXT_VTT)
+                .setLanguage(if (isIndo) "id" else (track.lang?.lowercase()?.take(2) ?: "en"))
+                .setLabel(track.lang ?: if (isIndo) "Indonesian (AI)" else "English")
+                .setSelectionFlags(
+                    if (isIndo || (!hasIndonesian && track == subtitles.first())) {
+                        C.SELECTION_FLAG_DEFAULT or C.SELECTION_FLAG_FORCED
+                    } else {
+                        0
+                    }
+                )
+                .build()
         }
     }
 
@@ -644,11 +689,12 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
             }
         }
 
+        // Configure timeout: connect 15s, read 35s to allow AI subtitle translation (Gemini) on cold start
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setUserAgent(userAgent)
-            .setConnectTimeoutMs(20000)
-            .setReadTimeoutMs(20000)
+            .setConnectTimeoutMs(15000)
+            .setReadTimeoutMs(35000)
             .setDefaultRequestProperties(requestProperties)
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
@@ -667,14 +713,7 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
 
         val subs = streamData?.subtitles ?: qualityItem?.headers?.let { null }
         if (!subs.isNullOrEmpty()) {
-            val subtitleConfigs = subs.mapNotNull { sub ->
-                val subUrl = sub.url ?: return@mapNotNull null
-                MediaItem.SubtitleConfiguration.Builder(Uri.parse(subUrl))
-                    .setMimeType(MimeTypes.TEXT_VTT)
-                    .setLanguage(sub.lang ?: "id")
-                    .setSelectionFlags(if (sub.lang?.contains("Indo", true) == true) C.SELECTION_FLAG_DEFAULT else 0)
-                    .build()
-            }
+            val subtitleConfigs = buildSubtitleConfigurations(subs)
             if (subtitleConfigs.isNotEmpty()) {
                 mediaItemBuilder.setSubtitleConfigurations(subtitleConfigs)
             }
@@ -880,6 +919,110 @@ class GlobalPlayerViewModel(application: Application) : AndroidViewModel(applica
             )
         }
         loadMediaSource(qualityItem, _uiState.value.streamData)
+        if (currentPos > 0) {
+            exoPlayer.seekTo(currentPos)
+        }
+    }
+
+    fun selectSubtitle(sub: ReconsumetSubtitle?) {
+        if (sub == null) {
+            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
+            _uiState.update { it.copy(isSubtitleEnabled = false, selectedSubtitleLang = null) }
+        } else {
+            val isIndo = sub.lang?.contains("Indonesian", ignoreCase = true) == true
+            val langCode = if (isIndo) "id" else (sub.lang?.lowercase()?.take(2) ?: "en")
+            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .setPreferredTextLanguage(langCode)
+                .build()
+            _uiState.update { it.copy(isSubtitleEnabled = true, selectedSubtitleLang = sub.lang) }
+        }
+    }
+
+    fun toggleSubtitles() {
+        val currentlyEnabled = _uiState.value.isSubtitleEnabled
+        if (currentlyEnabled) {
+            selectSubtitle(null)
+        } else {
+            val subs = _uiState.value.availableSubtitles
+            val target = subs.find { it.lang?.contains("Indonesian", ignoreCase = true) == true }
+                ?: subs.firstOrNull()
+            if (target != null) {
+                selectSubtitle(target)
+            } else {
+                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .build()
+                _uiState.update { it.copy(isSubtitleEnabled = true) }
+            }
+        }
+    }
+
+    fun selectServer(serverIndex: Int) {
+        val servers = _uiState.value.availableServers
+        if (serverIndex !in servers.indices) return
+        val server = servers[serverIndex]
+        val sources = server.sources ?: emptyList()
+        val currentStream = _uiState.value.streamData
+        val provider = server.serverName ?: currentStream?.qualities?.firstOrNull()?.provider ?: "Server ${serverIndex + 1}"
+
+        val qualityItems = sources.map { src ->
+            val rawQ = src.quality?.trim() ?: "Auto"
+            val normalizedQuality = when {
+                rawQ.equals("auto", ignoreCase = true) -> "Auto"
+                rawQ.equals("900", ignoreCase = true) -> "1080p"
+                rawQ.contains("1080") -> "1080p"
+                rawQ.contains("720") -> "720p"
+                rawQ.contains("480") -> "480p"
+                rawQ.contains("360") -> "360p"
+                rawQ.endsWith("p", ignoreCase = true) -> rawQ
+                else -> "${rawQ}p"
+            }
+            QualityItem(
+                quality = normalizedQuality,
+                provider = provider,
+                type = if (src.isM3U8 == true) "m3u8" else "mp4",
+                url = src.url,
+                rawUrl = src.rawUrl,
+                headers = server.headers
+            )
+        }
+
+        val newStreamData = StreamData(
+            title = currentStream?.title,
+            episodeSlug = _uiState.value.episodeSlug,
+            defaultQuality = qualityItems.firstOrNull()?.quality ?: "Auto",
+            qualities = qualityItems,
+            subtitles = server.subtitles,
+            headers = server.headers
+        )
+
+        val (qualityName, qualityUrl) = selectBestQuality(newStreamData)
+        val selectedItem = newStreamData.qualities?.find { it.quality == qualityName }
+            ?: newStreamData.qualities?.firstOrNull()
+
+        val currentPos = exoPlayer.currentPosition
+        val autoIndoSub = server.subtitles?.find { it.lang?.contains("Indonesian", ignoreCase = true) == true }?.lang
+            ?: server.subtitles?.firstOrNull()?.lang
+
+        _uiState.update {
+            it.copy(
+                selectedServerIndex = serverIndex,
+                streamData = newStreamData,
+                currentQuality = qualityName,
+                currentQualityUrl = qualityUrl,
+                availableSubtitles = server.subtitles.orEmpty(),
+                selectedSubtitleLang = autoIndoSub,
+                isSubtitleEnabled = !server.subtitles.isNullOrEmpty()
+            )
+        }
+
+        loadMediaSource(selectedItem, newStreamData)
         if (currentPos > 0) {
             exoPlayer.seekTo(currentPos)
         }
