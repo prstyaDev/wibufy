@@ -1,0 +1,8 @@
+let subtotal = 19.99;
+let quantity = 3;
+let total = subtotal * quantity;
+
+print("Total:");
+print(total);
+print((10 + 5) * 2);
+print(10 > 3);

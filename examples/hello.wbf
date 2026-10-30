@@ -1,0 +1,13 @@
+// First Wibufy program
+let name = "Wibufy";
+const version = 0.1;
+
+print("Hello from " + name);
+print("Version " + version);
+
+if version >= 0.1 {
+    print("The language is alive!");
+} else {
+    print("Keep building.");
+}
+
