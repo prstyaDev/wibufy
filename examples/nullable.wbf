@@ -1,0 +1,6 @@
+let nickname: string | null = null
+nickname = "Senpai"
+
+if nickname != null {
+    print("Konnichiwa, " + nickname)
+}

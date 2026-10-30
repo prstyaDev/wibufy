@@ -1,0 +1,5 @@
+fn announce(message: string) -> void {
+    print(message);
+    return;
+}
+announce("Wibufy v0.2 is running");

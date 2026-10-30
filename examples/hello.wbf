@@ -1,13 +1,16 @@
-// First Wibufy program
-let name = "Wibufy";
-const version = 0.1;
-
-print("Hello from " + name);
-print("Version " + version);
-
-if version >= 0.1 {
-    print("The language is alive!");
-} else {
-    print("Keep building.");
+// Wibufy v0.2 — typed functions and inference
+koto greet(name: string) -> string {
+    return "Konnichiwa, " + name
 }
 
+fn add(a: number, b: number) -> number {
+    return a + b
+}
+
+senpai language: string = "Wibufy"
+let user = "Developer"
+let total = add(20, 22)
+
+print(greet(user))
+print(language)
+print(total)

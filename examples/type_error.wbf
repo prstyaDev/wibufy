@@ -1,0 +1,3 @@
+// This program must fail static type checking before execution.
+let score: number = "not a number"
+print(score)

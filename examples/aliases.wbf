@@ -1,0 +1,13 @@
+// Wibufy aliases are equivalent to their standard keywords.
+senpai language = "Wibufy"
+let isAwesome: boolean = sugoi
+let isImpossible: boolean = muri
+
+print(language)
+print(isAwesome)
+print(isImpossible)
+
+koto greet(name: string) -> void {
+    print("Konnichiwa, " + name)
+}
+greet(language)

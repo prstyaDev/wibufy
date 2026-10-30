@@ -1,81 +1,89 @@
-# Wibufy
+# Wibufy v0.2.0
 
-**Modern. Expressive. General-purpose.**
+Modern. Expressive. General-purpose.
 
-Wibufy is an experimental general-purpose programming language. This repository contains the first tree-walk interpreter prototype, implemented in TypeScript.
+Wibufy is an experimental, statically typed general-purpose programming language implemented in TypeScript. Version 0.2 provides a tree-walk interpreter, typed functions, type inference, nullable values, and the Subtle Weeb + Mixed syntax identity.
 
 ## Requirements
 
 - Node.js 20 or newer
 - npm
 
-## Run
+## Install
 
 ```bash
 npm install
-npm run dev -- examples/hello.wbf
 ```
 
-Type-check:
+## Check and test
 
 ```bash
 npm run check
+npm test
+npm run build
 ```
 
-Build:
+## Run a program
 
 ```bash
-npm run build
-npm start -- examples/hello.wbf
+npm run dev -- run examples/hello.wbf
 ```
 
-## Current prototype (0.1.0)
+Or after building:
 
-Implemented:
-- `let` and `const` declarations
-- number, string, boolean and null literals
-- arithmetic and comparison operators
-- `and`, `or`, `!`
-- `print`
-- lexical block scope
-- `if` / `else`
-- `while`
-- `//` comments
-
-Not implemented yet:
-- assignment after declaration
-- functions and return
-- arrays and objects
-- static type checker
-- imports/modules
-- compiler/bytecode/VM
-- standard library and package manager
-
-The prototype intentionally starts small. The syntax examples in `SPEC.md` describe the intended direction and may include features that are not implemented yet.
-
-## Project structure
-
-```text
-src/
-  token.ts        Token model
-  lexer.ts        Source code -> tokens
-  ast.ts          AST node definitions
-  parser.ts       Tokens -> AST
-  interpreter.ts  AST -> execution
-  cli.ts          Command-line entry point
-examples/
-  hello.wbf
-  math.wbf
+```bash
+node dist/cli.js run examples/hello.wbf
 ```
 
-## Design principles
+## v0.2 language features
 
-1. Readability over clever syntax.
-2. Explicit, predictable behavior.
-3. Helpful diagnostics with source locations.
-4. A small core language with a useful standard library.
-5. Keep the language implementation independent from its eventual runtime.
+- Lexer, parser, AST, and tree-walk interpreter
+- `let` and `const` with mutability checks
+- Static types: `number`, `string`, `boolean`, `void`, and `null`
+- Type annotations and local type inference
+- Assignment and reassignment validation
+- Nullable types written as `T | null`
+- Null-check narrowing for direct `value != null` conditions
+- Top-level function declarations with typed parameters and explicit return types
+- Function calls, recursion, forward function references, and `return`
+- Compile-time validation of argument types, argument counts, and return types
+- Non-void functions must return on every statically recognized path
+- `if`, `else`, `while`, `print(...)`, arithmetic, comparison, and logical operators
+- Optional semicolons with newline-based statement termination
+- Wibufy aliases: `koto`, `senpai`, `sugoi`, and `muri`
+- Automated language regression tests
 
-## License
+## Wibufy aliases
 
-MIT (proposed; add a LICENSE file before publishing).
+| Standard keyword | Wibufy alias | Meaning |
+|---|---|---|
+| `fn` | `koto` | Function declaration |
+| `const` | `senpai` | Immutable binding |
+| `true` | `sugoi` | Boolean true |
+| `false` | `muri` | Boolean false |
+
+Aliases are reserved keywords and normalize to the same token and AST behavior as their standard counterparts.
+
+## Example
+
+```wbf
+koto greet(name: string) -> string {
+    return "Konnichiwa, " + name
+}
+
+senpai language = "Wibufy"
+let message = greet("Developer")
+print(language)
+print(message)
+```
+
+## Current v0.2 limitations
+
+- Function declarations are top-level only.
+- Nullable narrowing currently recognizes direct `value != null` checks in the `if` true branch.
+- Union types other than `T | null` are not supported yet.
+- Arrays, objects, generics, modules, imports/exports, and a standard library are planned for later milestones.
+- The JavaScript compiler is planned for v0.6; v0.2 runs through the tree-walk interpreter.
+- Type diagnostics do not yet consistently include source line and column information.
+
+See [SPEC.md](SPEC.md) for the language specification and roadmap.

@@ -1,0 +1,5 @@
+fn maybeNumber(flag: boolean) -> number {
+    if flag {
+        return 1
+    }
+}
