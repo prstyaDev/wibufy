@@ -10,7 +10,9 @@ export type Expr =
   | { kind: "assign"; name: string; value: Expr }
   | { kind: "call"; callee: Expr; args: Expr[] };
 
-export type Stmt =
+export interface SourceLocation { line: number; column: number }
+
+export type Stmt = (
   | { kind: "var"; name: string; annotation?: TypeRef; initializer: Expr; mutable: boolean }
   | { kind: "function"; name: string; params: { name: string; type: TypeRef }[]; returnType: TypeRef; body: Stmt[] }
   | { kind: "return"; value?: Expr }
@@ -18,4 +20,5 @@ export type Stmt =
   | { kind: "expression"; expression: Expr }
   | { kind: "block"; statements: Stmt[] }
   | { kind: "if"; condition: Expr; thenBranch: Stmt; elseBranch?: Stmt }
-  | { kind: "while"; condition: Expr; body: Stmt };
+  | { kind: "while"; condition: Expr; body: Stmt }
+) & { loc?: SourceLocation };

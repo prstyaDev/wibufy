@@ -1,0 +1,4 @@
+let numerator = 10
+let denominator = 0
+
+print(numerator / denominator)

@@ -1,15 +1,20 @@
 import type { Token, TokenType } from "./token.js";
 import type { Expr, Stmt, TypeName, TypeRef } from "./ast.js";
+import { formatDiagnostic } from "./diagnostics.js";
 
 export class Parser {
   private current = 0;
-  constructor(private readonly tokens: Token[]) {}
+  constructor(private readonly tokens: Token[], private readonly sourceText = "", private readonly sourceName = "<source>") {}
   parse(): Stmt[] { const out: Stmt[] = []; this.skipNewlines(); while (!this.check("eof")) { out.push(this.declaration()); this.skipNewlines(); } return out; }
   private declaration(): Stmt {
-    if (this.match("fn")) return this.functionDeclaration();
-    if (this.match("let")) return this.variableDeclaration(true);
-    if (this.match("const")) return this.variableDeclaration(false);
-    return this.statement();
+    const start = this.peek();
+    let result: Stmt;
+    if (this.match("fn")) result = this.functionDeclaration();
+    else if (this.match("let")) result = this.variableDeclaration(true);
+    else if (this.match("const")) result = this.variableDeclaration(false);
+    else result = this.statement();
+    result.loc = { line: start.line, column: start.column };
+    return result;
   }
   private functionDeclaration(): Stmt {
     const name = this.consume("identifier", "Expected function name.").lexeme;
@@ -96,5 +101,5 @@ export class Parser {
   private advance(): Token { if (!this.check("eof")) this.current++; return this.previous(); }
   private peek(): Token { return this.tokens[this.current]!; }
   private previous(): Token { return this.tokens[this.current - 1]!; }
-  private error(token: Token, message: string): Error { return new Error(`[Wibufy parser ${token.line}:${token.column}] ${message}`); }
+  private error(token: Token, message: string): Error { return new Error(formatDiagnostic("Parser", this.sourceName, this.sourceText, token.line, token.column, message, Math.max(1, token.lexeme.length))); }
 }

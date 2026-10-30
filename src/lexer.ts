@@ -1,4 +1,5 @@
 import type { Token, TokenType } from "./token.js";
+import { formatDiagnostic } from "./diagnostics.js";
 
 const keywords: Record<string, TokenType> = {
   fn: "fn", koto: "fn",
@@ -16,12 +17,14 @@ export class Lexer {
   private line = 1;
   private column = 1;
   private startColumn = 1;
-  constructor(private readonly source: string) {}
+  private startLine = 1;
+  constructor(private readonly source: string, private readonly sourceName = "<source>") {}
 
   scan(): Token[] {
     while (!this.end()) {
       this.start = this.current;
       this.startColumn = this.column;
+      this.startLine = this.line;
       this.scanToken();
     }
     this.tokens.push({ type: "eof", lexeme: "", literal: null, line: this.line, column: this.column });
@@ -44,7 +47,7 @@ export class Lexer {
       case "<": return this.add(this.match("=") ? "lessEqual" : "less");
       case "&": if (this.match("&")) return this.add("and"); throw this.error("Expected '&' after '&'.");
       case " ": case "\r": case "\t": return;
-      case "\n": this.tokens.push({ type: "newline", lexeme: "\n", literal: null, line: this.line, column: this.startColumn }); this.line++; this.column = 1; return;
+      case "\n": this.tokens.push({ type: "newline", lexeme: "\n", literal: null, line: this.startLine, column: this.startColumn }); return;
       case '"': return this.string();
       default:
         if (this.digit(c)) return this.number();
@@ -55,19 +58,18 @@ export class Lexer {
 
   private string(): void {
     while (this.peek() !== '"' && !this.end()) {
-      if (this.peek() === "\n") { this.line++; this.column = 0; }
       this.advance();
     }
     if (this.end()) throw this.error("Unterminated string.");
     this.advance();
-    this.tokens.push({ type: "string", lexeme: this.source.slice(this.start, this.current), literal: this.source.slice(this.start + 1, this.current - 1), line: this.line, column: this.startColumn });
+    this.tokens.push({ type: "string", lexeme: this.source.slice(this.start, this.current), literal: this.source.slice(this.start + 1, this.current - 1), line: this.startLine, column: this.startColumn });
   }
 
   private number(): void {
     while (this.digit(this.peek())) this.advance();
     if (this.peek() === "." && this.digit(this.peekNext())) { this.advance(); while (this.digit(this.peek())) this.advance(); }
     const text = this.source.slice(this.start, this.current);
-    this.tokens.push({ type: "number", lexeme: text, literal: Number(text), line: this.line, column: this.startColumn });
+    this.tokens.push({ type: "number", lexeme: text, literal: Number(text), line: this.startLine, column: this.startColumn });
   }
 
   private identifier(): void {
@@ -77,9 +79,9 @@ export class Lexer {
   }
 
   private add(type: TokenType): void {
-    this.tokens.push({ type, lexeme: this.source.slice(this.start, this.current), literal: null, line: this.line, column: this.startColumn });
+    this.tokens.push({ type, lexeme: this.source.slice(this.start, this.current), literal: null, line: this.startLine, column: this.startColumn });
   }
-  private advance(): string { const c = this.source[this.current++] ?? ""; this.column++; return c; }
+  private advance(): string { const c = this.source[this.current++] ?? ""; if (c === "\n") { this.line++; this.column = 1; } else this.column++; return c; }
   private match(c: string): boolean { if (this.end() || this.source[this.current] !== c) return false; this.current++; this.column++; return true; }
   private peek(): string { return this.source[this.current] ?? "\0"; }
   private peekNext(): string { return this.source[this.current + 1] ?? "\0"; }
@@ -87,5 +89,5 @@ export class Lexer {
   private digit(c: string): boolean { return c >= "0" && c <= "9"; }
   private alpha(c: string): boolean { return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_"; }
   private alphaNum(c: string): boolean { return this.alpha(c) || this.digit(c); }
-  private error(message: string): Error { return new Error(`[Wibufy lexer ${this.line}:${this.startColumn}] ${message}`); }
+  private error(message: string): Error { return new Error(formatDiagnostic("Lexer", this.sourceName, this.source, this.startLine, this.startColumn, message)); }
 }

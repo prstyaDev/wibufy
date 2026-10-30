@@ -90,3 +90,119 @@ test("recursive functions and complete if/else returns work", () => {
 test("nullable values can be passed after narrowing", () => {
   assert.deepEqual(run(`fn greet(name: string) -> void { print("Hi, " + name) }\nlet name: string | null = "Wibufy"\nif name != null { greet(name) }`), ["Hi, Wibufy"]);
 });
+
+
+test("type diagnostics include source file, line, column, and code frame", () => {
+  const source = `let count = 1\nlet age: number = "twenty"`;
+  const program = new Parser(new Lexer(source).scan()).parse();
+  assert.throws(
+    () => new TypeChecker("main.wbf", source).check(program),
+    error => {
+      assert.match(error.message, /\[Wibufy Type Error\]/);
+      assert.match(error.message, /main\.wbf:2:1/);
+      assert.match(error.message, /2 \| let age: number = "twenty"/);
+      assert.match(error.message, /expects number, got string/);
+      return true;
+    },
+  );
+});
+
+
+test("lexer diagnostics include source file, line, column, and code frame", () => {
+  const source = `let ok = 1\n  @`;
+  assert.throws(
+    () => new Lexer(source, "lexer-case.wbf").scan(),
+    error => {
+      assert.match(error.message, /\[Wibufy Lexer Error\]/);
+      assert.match(error.message, /lexer-case\.wbf:2:3/);
+      assert.match(error.message, /2 \|   @/);
+      assert.match(error.message, /Unexpected character/);
+      return true;
+    },
+  );
+});
+
+test("parser diagnostics include source file, line, column, and code frame", () => {
+  const source = `let ok = 1\nprint(2`;
+  const tokens = new Lexer(source, "parser-case.wbf").scan();
+  assert.throws(
+    () => new Parser(tokens, source, "parser-case.wbf").parse(),
+    error => {
+      assert.match(error.message, /\[Wibufy Parser Error\]/);
+      assert.match(error.message, /parser-case\.wbf:2:8/);
+      assert.match(error.message, /2 \| print\(2/);
+      assert.match(error.message, /Expected .* after print expression/);
+      return true;
+    },
+  );
+});
+
+test("lexer tracks line and column correctly after multiline strings", () => {
+  const source = `let text = "first\nsecond"\n  @`;
+  assert.throws(() => new Lexer(source, "multiline.wbf").scan(), /multiline\.wbf:3:3/);
+});
+
+
+test("runtime diagnostics include source file, line, column, and code frame", () => {
+  const source = `let numerator = 10\nlet denominator = 0\nprint(numerator / denominator)`;
+  const program = new Parser(new Lexer(source, "runtime-case.wbf").scan(), source, "runtime-case.wbf").parse();
+  new TypeChecker("runtime-case.wbf", source).check(program);
+  assert.throws(
+    () => new Interpreter(() => {}, "runtime-case.wbf", source).interpret(program),
+    error => {
+      assert.match(error.message, /\[Wibufy Runtime Error\]/);
+      assert.match(error.message, /runtime-case\.wbf:3:1/);
+      assert.match(error.message, /3 \| print\(numerator \/ denominator\)/);
+      assert.match(error.message, /Division by zero/);
+      return true;
+    },
+  );
+});
+
+test("runtime errors inside functions point to the failing function statement", () => {
+  const source = `fn fail() -> number {\n  return 5 / 0\n}\nprint(fail())`;
+  const program = new Parser(new Lexer(source, "function-runtime.wbf").scan(), source, "function-runtime.wbf").parse();
+  new TypeChecker("function-runtime.wbf", source).check(program);
+  assert.throws(
+    () => new Interpreter(() => {}, "function-runtime.wbf", source).interpret(program),
+    error => {
+      assert.match(error.message, /function-runtime\.wbf:2:3/);
+      assert.match(error.message, /Division by zero/);
+      return true;
+    },
+  );
+});
+
+
+test("TypeChecker resets state between separate programs", () => {
+  const checker = new TypeChecker();
+
+  const first = new Parser(new Lexer("let first = 10").scan()).parse();
+  const second = new Parser(new Lexer("let first = 20").scan()).parse();
+
+  assert.doesNotThrow(() => checker.check(first));
+  assert.doesNotThrow(() => checker.check(second));
+});
+
+test("TypeChecker restores return context after a failed function check", () => {
+  const checker = new TypeChecker();
+
+  const brokenSource = `fn broken() -> number {
+  return "not a number"
+}`;
+  const brokenProgram = new Parser(new Lexer(brokenSource).scan()).parse();
+
+  assert.throws(
+    () => checker.check(brokenProgram),
+    /function returns number, got string/,
+  );
+
+  const topLevelReturn = new Parser(
+    new Lexer("return 123").scan(),
+  ).parse();
+
+  assert.throws(
+    () => checker.check(topLevelReturn),
+    /return outside function/,
+  );
+});

@@ -1,4 +1,5 @@
 import type { Expr, Stmt, TypeName, TypeRef } from "./ast.js";
+import { formatDiagnostic } from "./diagnostics.js";
 type ValueType = TypeName | string;
 interface VariableSymbol { type: ValueType; mutable: boolean }
 interface FunctionSymbol { params: ValueType[]; returns: ValueType }
@@ -18,14 +19,26 @@ function withoutNull(type: ValueType): ValueType {
 }
 
 export class TypeChecker {
+  constructor(private readonly sourceName = "<source>", private readonly sourceText = "") {}
+
+  private diagnostic(message: string, statement?: Stmt): Error {
+    const loc = statement?.loc;
+    if (!loc) return new Error(`[Wibufy Type Error] ${message}`);
+    return new Error(formatDiagnostic("Type", this.sourceName, this.sourceText, loc.line, loc.column, message));
+  }
   private scopes: Map<string, VariableSymbol>[] = [new Map()];
   private functions = new Map<string, FunctionSymbol>();
   private currentReturn: ValueType | null = null;
 
   check(program: Stmt[]): void {
+    // Each check starts with an independent program context.
+    this.scopes = [new Map()];
+    this.functions = new Map();
+    this.currentReturn = null;
+
     for (const statement of program) {
       if (statement.kind === "function") {
-        if (this.functions.has(statement.name)) throw new Error(`Type error: function '${statement.name}' already declared.`);
+        if (this.functions.has(statement.name)) throw this.diagnostic(`function '${statement.name}' already declared.`, statement);
         this.functions.set(statement.name, { params: statement.params.map(p => typeOf(p.type)), returns: typeOf(statement.returnType) });
       }
     }
@@ -44,6 +57,15 @@ export class TypeChecker {
   private withScope(callback: () => void): void { this.scopes.push(new Map()); try { callback(); } finally { this.scopes.pop(); } }
 
   private statement(statement: Stmt): void {
+    try { this.statementCore(statement); }
+    catch (error) {
+      if (error instanceof Error && error.message.startsWith("[Wibufy Type Error]")) throw error;
+      const message = error instanceof Error ? error.message.replace(/^Type error:\s*/, "") : String(error);
+      throw this.diagnostic(message, statement);
+    }
+  }
+
+  private statementCore(statement: Stmt): void {
     switch (statement.kind) {
       case "var": {
         if (this.scopes.length === 1 && this.functions.has(statement.name)) throw new Error(`Type error: '${statement.name}' conflicts with a function declaration.`);
@@ -58,15 +80,18 @@ export class TypeChecker {
         if (this.scopes.length !== 1) throw new Error("Type error: function declarations must be at top level in v0.2.");
         if (this.scopes.length === 1 && this.scopes[0]!.has(statement.name)) throw new Error(`Type error: function '${statement.name}' conflicts with a variable declaration.`);
         const previousReturn = this.currentReturn;
-        this.withScope(() => {
-          for (const parameter of statement.params) this.declare(parameter.name, typeOf(parameter.type), false);
-          this.currentReturn = typeOf(statement.returnType);
-          for (const child of statement.body) this.statement(child);
-          if (this.currentReturn !== "void" && !this.alwaysReturns(statement.body)) {
-            throw new Error(`Type error: function '${statement.name}' must return ${this.currentReturn} on every path.`);
-          }
-        });
-        this.currentReturn = previousReturn;
+        try {
+          this.withScope(() => {
+            for (const parameter of statement.params) this.declare(parameter.name, typeOf(parameter.type), false);
+            this.currentReturn = typeOf(statement.returnType);
+            for (const child of statement.body) this.statement(child);
+            if (this.currentReturn !== "void" && !this.alwaysReturns(statement.body)) {
+              throw new Error(`Type error: function '${statement.name}' must return ${this.currentReturn} on every path.`);
+            }
+          });
+        } finally {
+          this.currentReturn = previousReturn;
+        }
         return;
       }
       case "return": {

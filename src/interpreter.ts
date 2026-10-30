@@ -1,7 +1,9 @@
 import type { Expr, Stmt } from "./ast.js";
+import { formatDiagnostic } from "./diagnostics.js";
 type Value = string | number | boolean | null | WFunction;
 interface Binding { value: Value; mutable: boolean }
 class ReturnSignal { constructor(readonly value: Value) {} }
+class RuntimeDiagnosticError extends Error {}
 
 class Environment {
   private values = new Map<string, Binding>();
@@ -34,7 +36,11 @@ class WFunction {
 
 export class Interpreter {
   private environment = new Environment();
-  constructor(private readonly output: (value: string) => void = console.log) {}
+  constructor(
+    private readonly output: (value: string) => void = console.log,
+    private readonly sourceName = "<source>",
+    private readonly sourceText = "",
+  ) {}
   interpret(statements: Stmt[]): void {
     for (const statement of statements) {
       if (statement.kind === "function") this.environment.define(statement.name, new WFunction(statement, this.environment), false);
@@ -43,6 +49,18 @@ export class Interpreter {
   }
 
   private execute(statement: Stmt): void {
+    try {
+      this.executeStatement(statement);
+    } catch (error) {
+      if (error instanceof ReturnSignal || error instanceof RuntimeDiagnosticError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      const loc = statement.loc;
+      if (!loc || !this.sourceText) throw new RuntimeDiagnosticError(message);
+      throw new RuntimeDiagnosticError(formatDiagnostic("Runtime", this.sourceName, this.sourceText, loc.line, loc.column, message));
+    }
+  }
+
+  private executeStatement(statement: Stmt): void {
     switch (statement.kind) {
       case "var": this.environment.define(statement.name, this.evaluate(statement.initializer), statement.mutable); return;
       case "function": if (!this.environment.hasLocal(statement.name)) this.environment.define(statement.name, new WFunction(statement, this.environment), false); return;

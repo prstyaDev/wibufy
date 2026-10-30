@@ -77,6 +77,19 @@ print(language)
 print(message)
 ```
 
+## Diagnostics
+
+Wibufy reports structured errors for four phases:
+
+- **Lexer errors:** unexpected characters and invalid lexical input.
+- **Parser errors:** invalid syntax and unexpected tokens.
+- **Type errors:** incompatible types, invalid declarations, and other semantic checks.
+- **Runtime errors:** execution failures such as division by zero.
+
+Diagnostics include the source filename, line, column, source line, and a code-frame pointer when location information is available.
+
+Lexer and parser diagnostics use token locations. Type and runtime diagnostics currently point to the containing statement rather than the exact expression or operator. Runtime errors inside functions point to the failing function statement.
+
 ## Current v0.2 limitations
 
 - Function declarations are top-level only.
@@ -84,6 +97,5 @@ print(message)
 - Union types other than `T | null` are not supported yet.
 - Arrays, objects, generics, modules, imports/exports, and a standard library are planned for later milestones.
 - The JavaScript compiler is planned for v0.6; v0.2 runs through the tree-walk interpreter.
-- Type diagnostics do not yet consistently include source line and column information.
 
 See [SPEC.md](SPEC.md) for the language specification and roadmap.

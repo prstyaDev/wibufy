@@ -21,9 +21,9 @@ async function main(): Promise<void> {
   }
   try {
     const source = await readFile(resolve(file), "utf8");
-    const program = new Parser(new Lexer(source).scan()).parse();
-    new TypeChecker().check(program);
-    if (mode === "run") new Interpreter().interpret(program);
+    const program = new Parser(new Lexer(source, file).scan(), source, file).parse();
+    new TypeChecker(file, source).check(program);
+    if (mode === "run") new Interpreter(console.log, file, source).interpret(program);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

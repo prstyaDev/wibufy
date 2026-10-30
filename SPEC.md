@@ -377,7 +377,7 @@ Wibufy distinguishes errors by phase:
 - Runtime errors.
 - Compiler errors.
 
-Lexer and parser diagnostics include source line and column. Current semantic and type diagnostics identify the error category and relevant symbol/type, but do not yet consistently include source spans.
+Lexer and parser diagnostics include source line and column. Semantic and type diagnostics include the source filename, line, column, source line, and a caret code frame when emitted through the CLI. Expression-level type errors are currently anchored to their containing statement; token-level highlighting is planned for a later diagnostic refinement.
 
 Type errors are reported before interpreter execution. The v0.2 CLI does not generate JavaScript; that backend is planned for v0.6.
 
@@ -521,7 +521,7 @@ Known v0.2 limitations:
 - Function declarations are top-level only.
 - Nullable narrowing currently handles direct `value != null` checks in the true branch of an `if` statement.
 - General union types, arrays, objects, generics, modules, and standard-library modules are not implemented.
-- Semantic/type diagnostics do not yet consistently carry source spans.
+- Semantic/type diagnostics currently anchor errors to the containing statement rather than the exact expression token.
 - The JavaScript compiler is not part of v0.2 and is planned for v0.6.
 
 ## 16. Locked Design Decisions
