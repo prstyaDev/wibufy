@@ -1,0 +1,32 @@
+// Wibufy v0.3.0 — Arrays, objects, and iteration
+
+let numbers = [10, 20, 30]
+print(numbers[0])
+numbers[1] = 99
+print(numbers[1])
+print(numbers.length)
+
+let names: Array<string> = ["Aki", "Yuki"]
+for name in names {
+    print(name)
+}
+
+let user = {
+    name: "Prasetya",
+    age: 24,
+    active: sugoi
+}
+
+print(user.name)
+user.age = 25
+print(user.age)
+
+let profiles: Array<{ name: string, score: number }> = [
+    { name: "Aki", score: 10 },
+    { name: "Yuki", score: 20 }
+]
+
+for profile in profiles {
+    print(profile.name)
+    print(profile.score)
+}

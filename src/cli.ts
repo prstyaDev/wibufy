@@ -10,7 +10,7 @@ async function main(): Promise<void> {
   const mode = args[0] === "run" ? args.shift() : "run";
   const file = args[0];
   if (!file) {
-    console.error("Wibufy v0.2.0\nUsage: wibufy run <file.wbf>");
+    console.error("Wibufy v0.3.0\nUsage: wibufy run <file.wbf>");
     process.exitCode = 1;
     return;
   }
