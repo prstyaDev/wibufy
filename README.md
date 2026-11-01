@@ -1,8 +1,8 @@
-# Wibufy v0.2.0
+# Wibufy v0.3.0
 
 Modern. Expressive. General-purpose.
 
-Wibufy is an experimental, statically typed general-purpose programming language implemented in TypeScript. Version 0.2 provides a tree-walk interpreter, typed functions, type inference, nullable values, and the Subtle Weeb + Mixed syntax identity.
+Wibufy is an experimental, statically typed general-purpose programming language implemented in TypeScript. Version 0.3 builds on the v0.2 core with arrays, structural objects, indexing, property access, and array iteration while preserving static typing and type inference.
 
 ## Requirements
 
@@ -35,7 +35,7 @@ Or after building:
 node dist/cli.js run examples/hello.wbf
 ```
 
-## v0.2 language features
+## v0.3 language features
 
 - Lexer, parser, AST, and tree-walk interpreter
 - `let` and `const` with mutability checks
@@ -48,7 +48,12 @@ node dist/cli.js run examples/hello.wbf
 - Function calls, recursion, forward function references, and `return`
 - Compile-time validation of argument types, argument counts, and return types
 - Non-void functions must return on every statically recognized path
-- `if`, `else`, `while`, `print(...)`, arithmetic, comparison, and logical operators
+- `if`, `else`, `while`, `for ... in`, `print(...)`, arithmetic, comparison, and logical operators
+- Array literals, `Array<T>` annotations, homogeneous element validation, indexing, indexed assignment, and `.length`
+- Mutable arrays use invariant element types (including nested arrays), while object values retain structural compatibility
+- Object literals, structural type inference, inline object type annotations, property access, and property assignment
+- Nested arrays and objects
+- Array iteration with scoped, immutable iteration variables
 - Optional semicolons with newline-based statement termination
 - Wibufy aliases: `koto`, `senpai`, `sugoi`, and `muri`
 - Automated language regression tests
@@ -90,12 +95,16 @@ Diagnostics include the source filename, line, column, source line, and a code-f
 
 Lexer and parser diagnostics use token locations. Type and runtime diagnostics currently point to the containing statement rather than the exact expression or operator. Runtime errors inside functions point to the failing function statement.
 
-## Current v0.2 limitations
+## Current v0.3 limitations
 
 - Function declarations are top-level only.
 - Nullable narrowing currently recognizes direct `value != null` checks in the `if` true branch.
 - Union types other than `T | null` are not supported yet.
-- Arrays, objects, generics, modules, imports/exports, and a standard library are planned for later milestones.
-- The JavaScript compiler is planned for v0.6; v0.2 runs through the tree-walk interpreter.
+- Generic functions, advanced generic constraints, modules, imports/exports, and a standard library remain planned for later milestones.
+- `for ... in` currently iterates arrays only.
+- Empty arrays require an explicit `Array<T>` annotation.
+- Array indexing is zero-based and checked at runtime for integer bounds.
+- Arrays expose `.length`; broader collection methods such as `push` and `pop` are not implemented yet.
+- The JavaScript compiler is planned for v0.6; v0.3 runs through the tree-walk interpreter.
 
 See [SPEC.md](SPEC.md) for the language specification and roadmap.

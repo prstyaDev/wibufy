@@ -1,9 +1,9 @@
 {
   "name": "wibufy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Wibufy programming language: statically typed tree-walk interpreter",
+  "description": "Wibufy programming language: statically typed tree-walk interpreter with data structures",
   "scripts": {
     "dev": "tsx src/cli.ts",
     "build": "tsc",

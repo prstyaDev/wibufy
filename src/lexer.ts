@@ -4,7 +4,8 @@ import { formatDiagnostic } from "./diagnostics.js";
 const keywords: Record<string, TokenType> = {
   fn: "fn", koto: "fn",
   let: "let", const: "const", senpai: "const",
-  return: "return", print: "print", if: "if", else: "else", while: "while",
+  return: "return", print: "print", if: "if", else: "else", while: "while", for: "for", in: "in",
+  Array: "typeArray", Object: "typeObject",
   true: "true", sugoi: "true", false: "false", muri: "false", null: "null",
   number: "typeNumber", string: "typeString", boolean: "typeBoolean", void: "typeVoid",
   and: "and", or: "or",
@@ -36,6 +37,8 @@ export class Lexer {
     switch (c) {
       case "(": return this.add("leftParen"); case ")": return this.add("rightParen");
       case "{": return this.add("leftBrace"); case "}": return this.add("rightBrace");
+      case "[": return this.add("leftBracket"); case "]": return this.add("rightBracket");
+      case ".": return this.add("dot");
       case ":": return this.add("colon"); case ",": return this.add("comma");
       case ";": return this.add("semicolon"); case "|": return this.add(this.match("|") ? "or" : "pipe");
       case "+": return this.add("plus"); case "-": return this.add(this.match(">") ? "arrow" : "minus");

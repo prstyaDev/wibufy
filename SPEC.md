@@ -1,5 +1,5 @@
 # Wibufy Language Specification
-## Draft 0.2
+## Draft 0.3
 
 **Status:** Active development specification  
 **Language:** Wibufy  
@@ -188,7 +188,7 @@ The type checker analyzes a program before execution or compilation.
 | `null` | Absence of a value |
 | `void` | Function without a return value |
 
-Future types include arrays, objects, function types, and generic types.
+The v0.3 implementation adds array types and structural object types. Generic functions and advanced generic types remain future work.
 
 ### 5.2 Type Annotations
 
@@ -318,10 +318,7 @@ while count < 5 {
 }
 ```
 
-Future control-flow features:
-- `for ... in`
-- `break`
-- `continue`
+`for ... in` is introduced in v0.3 for array iteration. `break` and `continue` remain future features.
 
 ## 9. Functions
 
@@ -444,12 +441,12 @@ Alias normalization belongs in the frontend. For example, `koto` and `fn` should
 - Automated regression tests.
 
 ### v0.3.0 — Data Structures
-- Arrays.
-- Objects.
-- Indexing and property access.
-- `for ... in`.
+- Array literals and `Array<T>` annotations.
+- Structural object literals and inline object type annotations.
+- Indexing and property access, including assignment.
+- `for ... in` iteration over arrays.
 - Generic collections groundwork.
-- Collection operations.
+- Core collection operations: indexed read/write and array `.length`.
 
 ### v0.4.0 — Advanced Type System
 - Generic functions.
@@ -520,11 +517,33 @@ The current v0.2 implementation includes the lexer, parser, AST, static type che
 Known v0.2 limitations:
 - Function declarations are top-level only.
 - Nullable narrowing currently handles direct `value != null` checks in the true branch of an `if` statement.
-- General union types, arrays, objects, generics, modules, and standard-library modules are not implemented.
+- General union types, generic functions, modules, and standard-library modules are not implemented. Arrays and objects are introduced in v0.3.
 - Semantic/type diagnostics currently anchor errors to the containing statement rather than the exact expression token.
 - The JavaScript compiler is not part of v0.2 and is planned for v0.6.
 
-## 16. Locked Design Decisions
+## 16. v0.3 Implementation Boundaries
+
+The v0.3 implementation extends the v0.2 lexer, parser, AST, type checker, interpreter, CLI, and regression suite.
+
+Implemented in v0.3:
+- Array literals, `Array<T>` annotations, inferred element types, and empty-array annotations.
+- Structural object literals and inline structural object annotations.
+- Array indexing and indexed assignment.
+- Object property access and property assignment.
+- Array `.length` reads.
+- Nested arrays and objects.
+- Array `for ... in` iteration with a scoped immutable iteration variable.
+- Compile-time validation of collection element and property types.
+
+Known v0.3 boundaries:
+- `for ... in` accepts arrays only.
+- Empty arrays require an explicit `Array<T>` annotation.
+- Collection methods such as `push` and `pop` are not implemented.
+- `break` and `continue` are not implemented.
+- Generic functions and user-defined generic types are deferred to v0.4.
+- The JavaScript compiler remains planned for v0.6.
+
+## 17. Locked Design Decisions
 
 | Area | Decision |
 |---|---|
@@ -546,7 +565,7 @@ Known v0.2 limitations:
 
 These decisions should not be changed casually. Changes require an explicit specification revision.
 
-## 17. Compatibility Policy
+## 18. Compatibility Policy
 
 During the 0.x development phase, syntax and semantics may evolve.
 
@@ -561,4 +580,89 @@ The v1.0 release will establish the initial stable compatibility policy.
 
 ---
 
-**End of Wibufy Specification Draft 0.2**
+## 19. v0.3 Data Structures
+
+### 19.1 Arrays
+
+Array literals use square brackets and contain elements of one consistent type:
+
+```wbf
+let numbers = [10, 20, 30]
+let names: Array<string> = ["Aki", "Yuki"]
+let empty: Array<number> = []
+
+print(numbers[0])
+numbers[1] = 99
+print(numbers.length)
+```
+
+Rules:
+- Arrays are zero-indexed.
+- A non-empty array infers its element type from its first element; every remaining element must have that same type.
+- Empty arrays require an explicit `Array<T>` annotation because no element type can be inferred.
+- Index expressions require a numeric index and produce the array element type.
+- Indexed assignment must use a value compatible with the array element type.
+- Out-of-range, negative, and non-integer indices produce runtime errors.
+- Arrays expose a read-only numeric `length` property.
+- Arrays are mutable and therefore invariant in their element type: `Array<A>` is compatible with `Array<B>` only when `A` and `B` are mutually type-compatible. This rule applies recursively to nested arrays.
+- Object values retain structural compatibility, including property-order independence and additional properties. However, structural compatibility alone does not make two mutable array types interchangeable.
+
+### 19.2 Objects
+
+Object literals use braces and named properties:
+
+```wbf
+let user = {
+    name: "Prasetya",
+    age: 24,
+    active: sugoi
+}
+
+print(user.name)
+user.age = 25
+```
+
+Object types are structural. They may be written inline as annotations:
+
+```wbf
+let user: { name: string, age: number } = {
+    name: "Aki",
+    age: 18
+}
+```
+
+Rules:
+- Property names are identifiers.
+- Duplicate property names in one object literal are errors.
+- Property access must refer to a declared property.
+- Property assignment must use a value compatible with that property's type.
+- An object value may contain additional properties beyond those required by an annotated structural type.
+- Nested arrays and objects are supported.
+
+### 19.3 Iteration
+
+The `for ... in` statement iterates over arrays in order:
+
+```wbf
+let numbers = [10, 20, 30]
+for item in numbers {
+    print(item)
+}
+```
+
+Rules:
+- The iterable must be an array in v0.3.
+- The iteration variable has the array's element type.
+- The iteration variable is immutable and scoped to the loop body.
+- Each iteration visits the next element in array order.
+
+### 19.4 v0.3 boundaries
+
+- Array and object values are supported by the interpreter and static type checker.
+- Generic collections groundwork is limited to the built-in `Array<T>` type; generic functions and user-defined generic types are deferred to v0.4.
+- Collection methods such as `push` and `pop`, `break`, and `continue` are not part of v0.3.
+- The JavaScript compiler remains planned for v0.6.
+
+---
+
+**End of Wibufy Specification Draft 0.3**
