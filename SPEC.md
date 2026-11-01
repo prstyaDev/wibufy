@@ -582,7 +582,7 @@ The v1.0 release will establish the initial stable compatibility policy.
 
 ## 19. v0.3 Data Structures
 
-### 18.1 Arrays
+### 19.1 Arrays
 
 Array literals use square brackets and contain elements of one consistent type:
 
@@ -604,8 +604,10 @@ Rules:
 - Indexed assignment must use a value compatible with the array element type.
 - Out-of-range, negative, and non-integer indices produce runtime errors.
 - Arrays expose a read-only numeric `length` property.
+- Arrays are mutable and therefore invariant in their element type: `Array<A>` is compatible with `Array<B>` only when `A` and `B` are mutually type-compatible. This rule applies recursively to nested arrays.
+- Object values retain structural compatibility, including property-order independence and additional properties. However, structural compatibility alone does not make two mutable array types interchangeable.
 
-### 18.2 Objects
+### 19.2 Objects
 
 Object literals use braces and named properties:
 
@@ -637,7 +639,7 @@ Rules:
 - An object value may contain additional properties beyond those required by an annotated structural type.
 - Nested arrays and objects are supported.
 
-### 18.3 Iteration
+### 19.3 Iteration
 
 The `for ... in` statement iterates over arrays in order:
 
@@ -654,7 +656,7 @@ Rules:
 - The iteration variable is immutable and scoped to the loop body.
 - Each iteration visits the next element in array order.
 
-### 18.4 v0.3 boundaries
+### 19.4 v0.3 boundaries
 
 - Array and object values are supported by the interpreter and static type checker.
 - Generic collections groundwork is limited to the built-in `Array<T>` type; generic functions and user-defined generic types are deferred to v0.4.

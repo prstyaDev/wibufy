@@ -50,6 +50,7 @@ node dist/cli.js run examples/hello.wbf
 - Non-void functions must return on every statically recognized path
 - `if`, `else`, `while`, `for ... in`, `print(...)`, arithmetic, comparison, and logical operators
 - Array literals, `Array<T>` annotations, homogeneous element validation, indexing, indexed assignment, and `.length`
+- Mutable arrays use invariant element types (including nested arrays), while object values retain structural compatibility
 - Object literals, structural type inference, inline object type annotations, property access, and property assignment
 - Nested arrays and objects
 - Array iteration with scoped, immutable iteration variables

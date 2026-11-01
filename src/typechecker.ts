@@ -18,11 +18,29 @@ function splitTopLevel(type: string, delimiter: string): string[] {
 function members(type: ValueType): string[] { return splitTopLevel(type, "|"); }
 function accepts(expected: ValueType, actual: ValueType): boolean {
   if (expected === actual) return true;
-  const expectedArray = arrayElement(expected), actualArray = arrayElement(actual);
-  if (expectedArray !== null && actualArray !== null) return accepts(expectedArray, actualArray);
-  const expectedObject = objectProperties(expected), actualObject = objectProperties(actual);
-  if (expectedObject && actualObject) { for (const [key, valueType] of expectedObject) { const actualType = actualObject.get(key); if (!actualType || !accepts(valueType, actualType)) return false; } return true; }
-  const allowed = members(expected); return members(actual).every(t => allowed.includes(t));
+
+  const expectedArray = arrayElement(expected);
+  const actualArray = arrayElement(actual);
+  if (expectedArray !== null && actualArray !== null) {
+    // Arrays are mutable, so their element types must be compatible both ways.
+    return sameType(expectedArray, actualArray);
+  }
+
+  const expectedObject = objectProperties(expected);
+  const actualObject = objectProperties(actual);
+  if (expectedObject && actualObject) {
+    for (const [key, valueType] of expectedObject) {
+      const actualType = actualObject.get(key);
+      if (!actualType || !accepts(valueType, actualType)) return false;
+    }
+    return true;
+  }
+
+  const allowed = members(expected);
+  return members(actual).every(type => allowed.includes(type));
+}
+function sameType(left: ValueType, right: ValueType): boolean {
+  return accepts(left, right) && accepts(right, left);
 }
 function arrayElement(type: ValueType): string | null { const m = /^Array<(.*)>$/.exec(type); return m?.[1] ?? null; }
 function objectProperties(type: ValueType): Map<string, string> | null {
@@ -82,7 +100,14 @@ export class TypeChecker {
       case "grouping": return this.expression(e.expression);
       case "variable": return this.lookup(e.name).type;
       case "assign": { const symbol = this.lookup(e.name); if (!symbol.mutable) throw new Error(`Type error: cannot assign to constant '${e.name}'.`); const actual = this.expression(e.value); if (!accepts(symbol.type, actual)) throw new Error(`Type error: '${e.name}' is ${symbol.type}, cannot assign ${actual}.`); return actual; }
-      case "array": { if (!e.elements.length) throw new Error("Type error: cannot infer the element type of an empty array; add an Array<T> annotation."); const types = e.elements.map(x => this.expression(x)); const first = types[0]!; if (types.some(t => t !== first)) throw new Error(`Type error: array elements must have a consistent type; expected ${first}, got ${types.find(t => t !== first)}.`); return `Array<${first}>`; }
+      case "array": {
+        if (!e.elements.length) throw new Error("Type error: cannot infer the element type of an empty array; add an Array<T> annotation.");
+        const types = e.elements.map(x => this.expression(x));
+        const first = types[0]!;
+        const incompatible = types.find(type => !sameType(first, type));
+        if (incompatible !== undefined) throw new Error(`Type error: array elements must have a consistent type; expected ${first}, got ${incompatible}.`);
+        return `Array<${first}>`;
+      }
       case "object": { const names = new Set<string>(); const fields: string[] = []; for (const p of e.properties) { if (names.has(p.name)) throw new Error(`Type error: duplicate object property '${p.name}'.`); names.add(p.name); fields.push(`${p.name}:${this.expression(p.value)}`); } return `Object{${fields.join(",")}}`; }
       case "index": { const object = this.expression(e.object); const index = this.expression(e.index); if (index !== "number") throw new Error("Type error: array index must be a number."); const element = arrayElement(object); if (element === null) throw new Error(`Type error: cannot index value of type ${object}; expected an array.`); return element; }
       case "indexAssign": { const object = this.expression(e.object); const index = this.expression(e.index); const value = this.expression(e.value); if (index !== "number") throw new Error("Type error: array index must be a number."); const element = arrayElement(object); if (element === null) throw new Error(`Type error: cannot assign an index on ${object}.`); if (!accepts(element, value)) throw new Error(`Type error: array element expects ${element}, got ${value}.`); return value; }

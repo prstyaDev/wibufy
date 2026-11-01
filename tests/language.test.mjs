@@ -248,6 +248,79 @@ test("structural object compatibility ignores property order and permits extra f
   assert.deepEqual(run(`let profile: { age: number, name: string } = { name: "Yuki", active: sugoi, age: 20 }\nprint(profile.name)\nprint(profile.age)`), ["Yuki", "20"]);
 });
 
+test("mutable arrays reject structurally compatible but different element types", () => {
+  const source = `
+koto replace(values: Array<{ name: string }>) -> void {
+  values[0] = { name: "Yuki" }
+}
+let records: Array<{ name: string, score: number }> = [
+  { name: "Aki", score: 10 }
+]
+replace(records)
+`;
+
+  assert.throws(() => compile(source), /expects Array<Object/);
+});
+
+test("mutable array variables cannot be reassigned across structural element types", () => {
+  assert.throws(
+    () => compile(`
+let detailed: Array<{ name: string, score: number }> = [{ name: "Aki", score: 10 }]
+let basic: Array<{ name: string }> = [{ name: "Yuki" }]
+detailed = basic
+`),
+    /cannot assign Array<Object/,
+  );
+  assert.throws(
+    () => compile(`
+let detailed: Array<{ name: string, score: number }> = [{ name: "Aki", score: 10 }]
+let basic: Array<{ name: string }> = [{ name: "Yuki" }]
+basic = detailed
+`),
+    /cannot assign Array<Object/,
+  );
+});
+
+test("array invariance is symmetric and recursive", () => {
+  assert.throws(
+    () => compile(`
+koto replace(values: Array<{ name: string, score: number }>) -> void {}
+let records: Array<{ name: string }> = [{ name: "Aki" }]
+replace(records)
+`),
+    /expects Array<Object/,
+  );
+
+  assert.throws(
+    () => compile(`
+koto replace(values: Array<Array<{ name: string }>>) -> void {}
+let records: Array<Array<{ name: string, score: number }>> = [
+  [{ name: "Aki", score: 10 }]
+]
+replace(records)
+`),
+    /expects Array</,
+  );
+});
+
+test("array element writes preserve structural object compatibility", () => {
+  assert.deepEqual(
+    run(`let people: Array<{ name: string }> = [{ name: "Aki" }]
+people[0] = { name: "Yuki", score: 20 }
+print(people[0].name)`),
+    ["Yuki"],
+  );
+});
+
+test("array element structural types ignore object property order", () => {
+  assert.deepEqual(
+    run(`let people = [{ name: "Aki", age: 18 }, { age: 20, name: "Yuki" }]
+print(people[1].name)
+print(people[1].age)`),
+    ["Yuki", "20"],
+  );
+});
+
 test("nested collection types preserve structural validation", () => {
   assert.deepEqual(run(`let records: Array<{ name: string, score: number }> = [{ name: "Aki", score: 10 }]\nprint(records[0].name)\nprint(records[0].score)`), ["Aki", "10"]);
   assert.throws(() => compile(`let records: Array<{ name: string, score: number }> = [{ name: "Aki", score: "ten" }]`), /expects Array<Object\{name:string,score:number\}>/);
