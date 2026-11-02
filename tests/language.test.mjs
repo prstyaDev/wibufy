@@ -666,6 +666,18 @@ print(relay({ value: 5 }))
 });
 
 // Regression: primitive aliases must also work in runtime type guards.
+// Regression: generic aliases must substitute arguments in runtime guards.
+test("primitive type guards resolve generic aliases at runtime", () => {
+  assert.deepEqual(run(`
+type Identity<T> = T
+type Numeric<T> = Identity<T>
+fn increment(value: number | string) -> number {
+  if value is Numeric<number> { return value + 1 } else { return 0 }
+}
+print(increment(10))
+`), ["11"]);
+});
+
 test("primitive type guards resolve chained primitive aliases at runtime", () => {
   assert.deepEqual(run(`
 type Numeric = number

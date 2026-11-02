@@ -17,8 +17,8 @@ npm run dev -- run examples/advanced_types.wbf
 Expected test summary:
 
 ```text
-tests 80
-pass 80
+tests 83
+pass 83
 fail 0
 ```
 

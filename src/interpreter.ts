@@ -23,15 +23,105 @@ export class Interpreter {
     for (const s of statements) if (s.kind === "function") this.environment.define(s.name, new WFunction(s, this.environment), false);
     for (const s of statements) this.execute(s);
   }
-  private resolveRuntimeType(ref: TypeRef, seen = new Set<string>()): string | null {
+  private substituteRuntimeTypeRef(
+    ref: TypeRef,
+    substitutions: Map<string, TypeRef>,
+    resolving = new Set<string>(),
+  ): TypeRef {
     if (typeof ref === "string") return ref;
-    if (ref.kind !== "namedType" || ref.arguments.length !== 0) return null;
-    if (["number", "string", "boolean", "null"].includes(ref.name)) return ref.name;
+
+    switch (ref.kind) {
+      case "namedType": {
+        if (ref.arguments.length === 0 && substitutions.has(ref.name)) {
+          if (resolving.has(ref.name)) return ref;
+          const nextResolving = new Set(resolving);
+          nextResolving.add(ref.name);
+          return this.substituteRuntimeTypeRef(
+            substitutions.get(ref.name)!,
+            substitutions,
+            nextResolving,
+          );
+        }
+        return {
+          ...ref,
+          arguments: ref.arguments.map(argument =>
+            this.substituteRuntimeTypeRef(argument, substitutions, resolving),
+          ),
+        };
+      }
+      case "union":
+        return {
+          ...ref,
+          types: ref.types.map(type =>
+            this.substituteRuntimeTypeRef(type, substitutions, resolving),
+          ),
+        };
+      case "arrayType":
+        return {
+          ...ref,
+          element: this.substituteRuntimeTypeRef(ref.element, substitutions, resolving),
+        };
+      case "objectType":
+        return {
+          ...ref,
+          properties: ref.properties.map(property => ({
+            ...property,
+            type: this.substituteRuntimeTypeRef(property.type, substitutions, resolving),
+          })),
+        };
+    }
+  }
+  private resolveRuntimeType(
+    ref: TypeRef,
+    substitutions = new Map<string, TypeRef>(),
+    seenAliases = new Set<string>(),
+    resolvingParameters = new Set<string>(),
+  ): string | null {
+    if (typeof ref === "string") return ref;
+    if (ref.kind !== "namedType") return null;
+
+    if (ref.arguments.length === 0 && substitutions.has(ref.name)) {
+      if (resolvingParameters.has(ref.name)) return null;
+
+      const nextResolving = new Set(resolvingParameters);
+      nextResolving.add(ref.name);
+
+      return this.resolveRuntimeType(
+        substitutions.get(ref.name)!,
+        substitutions,
+        seenAliases,
+        nextResolving,
+      );
+    }
+
+    if (["number", "string", "boolean", "null"].includes(ref.name)) {
+      return ref.arguments.length === 0 ? ref.name : null;
+    }
+
     const alias = this.aliases.get(ref.name);
-    if (!alias || alias.typeParameters.length !== 0 || seen.has(ref.name)) return null;
-    const next = new Set(seen);
-    next.add(ref.name);
-    return this.resolveRuntimeType(alias.target, next);
+    if (
+      !alias ||
+      seenAliases.has(ref.name) ||
+      alias.typeParameters.length !== ref.arguments.length
+    ) {
+      return null;
+    }
+
+    const nextSubstitutions = new Map<string, TypeRef>();
+
+    alias.typeParameters.forEach((parameter, index) => {
+      nextSubstitutions.set(parameter.name, this.substituteRuntimeTypeRef(ref.arguments[index]!, substitutions));
+    });
+
+    const nextSeenAliases = new Set(seenAliases);
+    nextSeenAliases.add(ref.name);
+
+    return this.resolveRuntimeType(
+      alias.target,
+      nextSubstitutions,
+      nextSeenAliases,
+      new Set(),
+    );
   }
   private execute(statement: Stmt): void {
     try { this.executeStatement(statement); } catch (error) { if (error instanceof ReturnSignal || error instanceof RuntimeDiagnosticError) throw error; const message = error instanceof Error ? error.message : String(error); const loc = statement.loc; if (!loc || !this.sourceText) throw new RuntimeDiagnosticError(message); throw new RuntimeDiagnosticError(formatDiagnostic("Runtime", this.sourceName, this.sourceText, loc.line, loc.column, message)); }
