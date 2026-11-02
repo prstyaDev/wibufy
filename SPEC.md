@@ -775,9 +775,6 @@ Rules:
 
 ---
 
-**End of Wibufy Specification Draft 0.4**
-
-
 ## 20. v0.4 Implementation Boundaries
 
 ### Implemented in the v0.4 development build
@@ -811,3 +808,7 @@ Rules:
 ### Development note
 
 The v0.4 build is a development release for testing. Both parsed type references and resolved semantic types use recursive structured representations. Canonical type keys are used only for identity and union normalization; semantic operations do not depend on parsing or comparing serialized type strings.
+
+---
+
+**End of Wibufy Specification Draft 0.4**
