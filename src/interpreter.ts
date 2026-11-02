@@ -23,6 +23,7 @@ export class Interpreter {
   }
   private executeStatement(s: Stmt): void {
     switch (s.kind) {
+      case "typeAlias": return;
       case "var": this.environment.define(s.name, this.evaluate(s.initializer), s.mutable); return;
       case "function": if (!this.environment.hasLocal(s.name)) this.environment.define(s.name, new WFunction(s, this.environment), false); return;
       case "return": throw new ReturnSignal(s.value ? this.evaluate(s.value) : null);
@@ -37,6 +38,15 @@ export class Interpreter {
   private evaluate(e: Expr): Value {
     switch (e.kind) {
       case "literal": return e.value as Value;
+      case "typeTest": {
+        const value = this.evaluate(e.value);
+        const target = typeof e.type === "string" ? e.type : e.type.kind === "namedType" ? e.type.name : "";
+        if (target === "number") return typeof value === "number" && !Number.isNaN(value);
+        if (target === "string") return typeof value === "string";
+        if (target === "boolean") return typeof value === "boolean";
+        if (target === "null") return value === null;
+        throw new Error("Runtime type guards support only primitive types.");
+      }
       case "grouping": return this.evaluate(e.expression);
       case "variable": return this.environment.get(e.name);
       case "assign": { const value = this.evaluate(e.value); this.environment.assign(e.name, value); return value; }
