@@ -1,4 +1,4 @@
-import type { Expr, Stmt } from "./ast.js";
+import type { Expr, Stmt, TypeRef } from "./ast.js";
 import { formatDiagnostic } from "./diagnostics.js";
 type ObjectValue = { [key: string]: Value };
 type Value = string | number | boolean | null | WFunction | Value[] | ObjectValue;
@@ -16,8 +16,23 @@ class Environment {
 class WFunction { constructor(readonly declaration: Extract<Stmt, { kind: "function" }>, readonly closure: Environment) {} }
 export class Interpreter {
   private environment = new Environment();
+  private aliases = new Map<string, Extract<Stmt, { kind: "typeAlias" }>>();
   constructor(private readonly output: (value: string) => void = console.log, private readonly sourceName = "<source>", private readonly sourceText = "") {}
-  interpret(statements: Stmt[]): void { for (const s of statements) if (s.kind === "function") this.environment.define(s.name, new WFunction(s, this.environment), false); for (const s of statements) this.execute(s); }
+  interpret(statements: Stmt[]): void {
+    this.aliases = new Map(statements.filter((s): s is Extract<Stmt, { kind: "typeAlias" }> => s.kind === "typeAlias").map(s => [s.name, s]));
+    for (const s of statements) if (s.kind === "function") this.environment.define(s.name, new WFunction(s, this.environment), false);
+    for (const s of statements) this.execute(s);
+  }
+  private resolveRuntimeType(ref: TypeRef, seen = new Set<string>()): string | null {
+    if (typeof ref === "string") return ref;
+    if (ref.kind !== "namedType" || ref.arguments.length !== 0) return null;
+    if (["number", "string", "boolean", "null"].includes(ref.name)) return ref.name;
+    const alias = this.aliases.get(ref.name);
+    if (!alias || alias.typeParameters.length !== 0 || seen.has(ref.name)) return null;
+    const next = new Set(seen);
+    next.add(ref.name);
+    return this.resolveRuntimeType(alias.target, next);
+  }
   private execute(statement: Stmt): void {
     try { this.executeStatement(statement); } catch (error) { if (error instanceof ReturnSignal || error instanceof RuntimeDiagnosticError) throw error; const message = error instanceof Error ? error.message : String(error); const loc = statement.loc; if (!loc || !this.sourceText) throw new RuntimeDiagnosticError(message); throw new RuntimeDiagnosticError(formatDiagnostic("Runtime", this.sourceName, this.sourceText, loc.line, loc.column, message)); }
   }
@@ -40,7 +55,7 @@ export class Interpreter {
       case "literal": return e.value as Value;
       case "typeTest": {
         const value = this.evaluate(e.value);
-        const target = typeof e.type === "string" ? e.type : e.type.kind === "namedType" ? e.type.name : "";
+        const target = this.resolveRuntimeType(e.type) ?? "";
         if (target === "number") return typeof value === "number" && !Number.isNaN(value);
         if (target === "string") return typeof value === "string";
         if (target === "boolean") return typeof value === "boolean";

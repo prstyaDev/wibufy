@@ -85,21 +85,28 @@ function infer(template: ValueType, actual: ValueType, names: Set<string>, found
   }
   if (sameKey(template, actual)) return true;
   if (template.kind === "union") {
+    const baseline = new Map(found);
     const merged = new Map(found);
+
     for (const actualMember of members(actual)) {
+      // Infer each actual union member independently from the original
+      // bindings. This allows T to collect number | string, for example.
       const candidates = template.members.flatMap(member => {
-        const candidate = new Map(merged);
+        const candidate = new Map(baseline);
         if (!infer(member, actualMember, names, candidate)) return [];
-        const added = [...candidate.keys()].filter(name => !merged.has(name)).length;
+        const added = [...candidate.keys()].filter(name => !baseline.has(name)).length;
         return [{ candidate, added }];
       }).sort((a, b) => a.added - b.added);
+
       if (!candidates.length) return false;
+
       for (const [name, value] of candidates[0]!.candidate) {
+        if (baseline.has(name)) continue;
         const previous = merged.get(name);
-        if (previous && !sameType(previous, value)) return false;
-        merged.set(name, value);
+        merged.set(name, previous ? unionType([previous, value]) : value);
       }
     }
+
     found.clear();
     for (const [name, value] of merged) found.set(name, value);
     return true;

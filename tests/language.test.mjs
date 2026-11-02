@@ -664,3 +664,26 @@ fn relay<U extends { value: number }>(item: U) -> number {
 print(relay({ value: 5 }))
 `), ["5"]);
 });
+
+// Regression: primitive aliases must also work in runtime type guards.
+test("primitive type guards resolve chained primitive aliases at runtime", () => {
+  assert.deepEqual(run(`
+type Numeric = number
+type Count = Numeric
+fn increment(value: number | string) -> number {
+  if value is Count { return value + 1 } else { return 0 }
+}
+print(increment(10))
+`), ["11"]);
+});
+
+// Regression: T must combine number and string from T | null.
+test("generic inference combines members of a multi-member nullable union", () => {
+  assert.deepEqual(run(`
+fn isPresent<T>(value: T | null) -> boolean { return value != null }
+let maybe: number | string | null = "Wibufy"
+print(isPresent(maybe))
+maybe = 42
+print(isPresent(maybe))
+`), ["true", "true"]);
+});
