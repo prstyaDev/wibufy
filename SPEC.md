@@ -1,9 +1,9 @@
 # Wibufy Language Specification
-## Draft 0.3
+## Draft 0.4
 
-**Status:** Active development specification  
-**Language:** Wibufy  
-**File extension:** `.wbf`  
+**Status:** v0.4.0-dev.2 development draft
+**Language:** Wibufy
+**File extension:** `.wbf`
 **Implementation language:** TypeScript
 
 ## 1. Language Overview
@@ -174,9 +174,7 @@ let total = 10 +
 
 ## 5. Type System
 
-Wibufy uses static typing.
-
-The type checker analyzes a program before execution or compilation.
+Wibufy uses static typing. The type checker analyzes a program before interpretation or compilation.
 
 ### 5.1 Built-in Types
 
@@ -188,69 +186,180 @@ The type checker analyzes a program before execution or compilation.
 | `null` | Absence of a value |
 | `void` | Function without a return value |
 
-The v0.3 implementation adds array types and structural object types. Generic functions and advanced generic types remain future work.
+Arrays use `Array<T>`. Object types use structural property shapes.
 
 ### 5.2 Type Annotations
 
 Variables may declare an explicit type.
 
 ```wbf
-let age: number = 21;
-let username: string = "prstyaDev";
-const enabled: boolean = true;
+let age: number = 21
+let username: string = "prstyaDev"
+const enabled: boolean = true
 ```
 
 ### 5.3 Type Inference
 
-When an annotation is omitted, Wibufy infers the type from the initializer.
+When an annotation is omitted, Wibufy infers the type from the initializer. Reassignment must remain compatible with the inferred or declared type.
+
+An empty array still requires an explicit element type.
+
+### 5.4 Structured Type Model
+
+The AST represents type syntax structurally: primitive, named/generic, array, object, and union type references. The type checker resolves these references into a recursive semantic model containing primitive types, type parameters, arrays, structural objects, and normalized unions. Assignability, generic inference, substitution, alias expansion, and narrowing operate on this semantic model. A canonical structural key is used only for equality/deduplication and deterministic union normalization.
+
+The intended semantic type categories are:
+- Primitive types.
+- Array types.
+- Structural object types.
+- Union types.
+- Generic type parameters.
+- Named generic types and aliases.
+
+Mutable arrays remain invariant in their element type. Structural object compatibility remains property-based and permits additional properties.
+
+### 5.5 Union Types
+
+A union type represents a value that may be one of multiple types.
 
 ```wbf
-let age = 21;
-let username = "prstyaDev";
-let enabled = sugoi;
+let value: number | string = 100
+value = "Wibufy"
+
+let nullable: number | string | null = null
 ```
 
-The inferred type must be checked consistently when the variable is reassigned.
+Rules:
+- A union may contain two or more distinct members.
+- Nested unions are flattened.
+- Duplicate members are removed.
+- Members are normalized so their order does not affect type equality.
+- A one-member union is reduced to that member.
+- `void` cannot be a union member.
+- A value is assignable to a union when it is compatible with at least one member.
+- A union value is assignable to a target only when every possible member is compatible with that target.
+- Operations on an unnarrowed union must be valid for all possible members.
 
-### 5.4 Nullable Types
+Array literals may use contextual union element types when the array has an explicit `Array<T>` annotation. Unannotated array literals retain the consistent-element inference rule.
 
-Nullable types use union syntax with `null`.
+### 5.6 Nullable Types and Type Narrowing
+
+Nullable types are ordinary unions that include `null`.
 
 ```wbf
-let username: string | null = null;
-
-username = "prstyaDev";
-username = null;
+let nickname: string | null = null
 ```
 
-In v0.2, the only supported union form is a nullable type with exactly one non-null type and `null`, such as `string | null` or `number | null`. General union types are deferred to v0.4.
-
-A nullable value must be narrowed before being used where a non-null value is required. The v0.2 type checker recognizes a direct `value != null` condition in the true branch of an `if` statement.
+The v0.2 check `value != null` remains supported. v0.4 also supports `value == null` and primitive type guards using `is`.
 
 ```wbf
-let nickname: string | null = "Senpai";
-
-if nickname != null {
-    print("Konnichiwa, " + nickname);
+fn show(value: number | string | null) -> void {
+    if value is number {
+        print(value + 1)
+    } else {
+        if value is string {
+            print(value + "!")
+        } else {
+            print("empty")
+        }
+    }
 }
 ```
 
-Inside the conditional's true branch, the type checker recognizes `nickname` as `string`. More advanced narrowing, including compound conditions and false-branch narrowing, is deferred.
+For a direct variable check:
+- `value is T` keeps matching union members in the true branch.
+- The false branch removes the tested members.
+- `value == null` narrows to `null` in the true branch.
+- `value != null` removes `null` in the true branch.
+- The opposite branch receives the complementary narrowing.
 
-### 5.5 Type Compatibility
+Primitive runtime guards support `number`, `string`, `boolean`, and `null`. The `number` guard excludes `NaN`.
+
+Compound-condition narrowing, arbitrary expression narrowing, structural object guards, and runtime generic reflection are not part of this release.
+
+### 5.7 Generic Functions
+
+Functions may declare type parameters.
+
+```wbf
+fn identity<T>(value: T) -> T {
+    return value
+}
+
+let numberResult = identity(100)
+let textResult = identity<string>("Wibufy")
+```
+
+Multiple type parameters are supported:
+
+```wbf
+fn first<A, B>(left: A, right: B) -> A {
+    return left
+}
+```
+
+Rules:
+- Type parameter names are unique within a declaration.
+- Type parameters may appear in parameter and return types.
+- Type arguments are inferred from call arguments when possible.
+- Explicit type arguments use `function<Type>(...)`.
+- Nested generic inference is supported.
+- Repeated uses of one type parameter must infer a consistent type.
+- Conflicting or missing inference produces a type diagnostic.
+- Function bodies are checked using their declared type parameters and constraints.
+- Generic functions execute as ordinary interpreter functions; generic parameters have no runtime representation.
+
+### 5.8 Type Aliases and Generic Types
+
+Type aliases provide names for existing types.
+
+```wbf
+type UserId = number
+
+type Box<T> = { value: T }
+
+let box: Box<number> = { value: 100 }
+```
+
+Rules:
+- Type aliases are top-level declarations.
+- Aliases are structural, not nominal.
+- Aliases do not create runtime values or runtime overhead.
+- Generic aliases accept declared type arguments.
+- Forward references are allowed when the dependency graph is not circular.
+- Circular alias expansion is rejected.
+- Unknown aliases, duplicate aliases, and incorrect type argument counts produce diagnostics.
+- Type aliases use a type namespace separate from runtime variables and functions.
+- Built-in `Array<T>` remains supported and invariant.
+
+### 5.9 Structural Type Constraints
+
+Generic type parameters may declare structural constraints using `extends`.
+
+```wbf
+fn getValue<T extends { value: number }>(item: T) -> number {
+    return item.value
+}
+```
+
+Rules:
+- Constraints are supported on generic functions and generic type aliases.
+- A constraint may refer to another type parameter in the same generic declaration.
+- The actual type argument must provide every property required by the resolved constraint.
+- Additional properties are allowed.
+- A generic function may access only properties guaranteed by its constraint.
+- Constraints are checked when generic arguments are resolved or inferred.
+
+### 5.10 Type Compatibility
 
 - Assignment must respect the declared or inferred type.
-- Function arguments must match parameter types.
-- Return values must match the declared return type.
-- Arithmetic operators require compatible operands. In v0.2, `+` accepts two numbers or two strings.
-- Logical operators require boolean operands.
+- Function arguments and return values must be compatible.
+- Arithmetic operators require compatible operands. `+` accepts two numbers or two strings.
+- Logical operators require booleans.
 - `if` and `while` conditions must be boolean.
 - Non-void functions must return a compatible value on every statically recognized path.
-- Invalid type combinations must produce compile-time diagnostics before interpretation.
-- `sugoi` and `true` both have type `boolean`.
-- `muri` and `false` both have type `boolean`.
-
-Implicit conversion between unrelated types is not part of the initial specification.
+- Type errors are reported before interpretation.
+- Implicit conversion between unrelated types is not part of the specification.
 
 ## 6. Variables
 
@@ -449,14 +558,15 @@ Alias normalization belongs in the frontend. For example, `koto` and `fn` should
 - Core collection operations: indexed read/write and array `.length`.
 
 ### v0.4.0 — Advanced Type System
-- Generic functions.
-- Union types.
-- Nullable type handling.
-- Type narrowing.
-- Type aliases.
-- Improved inference.
-- Advanced compile-time diagnostics.
-
+- Structured type references and normalized type compatibility.
+- General union types.
+- Nullable type handling and primitive type narrowing.
+- Generic type parameters and generic functions.
+- Generic inference and explicit type arguments.
+- Type aliases and generic type aliases.
+- Structural type constraints.
+- Improved compile-time diagnostics.
+- Regression and backward-compatibility tests.
 ### v0.5.0 — Modules and Standard Library
 - Module system.
 - Import and export.
@@ -517,7 +627,7 @@ The current v0.2 implementation includes the lexer, parser, AST, static type che
 Known v0.2 limitations:
 - Function declarations are top-level only.
 - Nullable narrowing currently handles direct `value != null` checks in the true branch of an `if` statement.
-- General union types, generic functions, modules, and standard-library modules are not implemented. Arrays and objects are introduced in v0.3.
+- General union types, generic functions, and aliases are introduced in v0.4. Modules and standard-library modules remain future work.
 - Semantic/type diagnostics currently anchor errors to the containing statement rather than the exact expression token.
 - The JavaScript compiler is not part of v0.2 and is planned for v0.6.
 
@@ -540,7 +650,7 @@ Known v0.3 boundaries:
 - Empty arrays require an explicit `Array<T>` annotation.
 - Collection methods such as `push` and `pop` are not implemented.
 - `break` and `continue` are not implemented.
-- Generic functions and user-defined generic types are deferred to v0.4.
+- Generic functions, user-defined type aliases, and generic aliases are introduced in v0.4.
 - The JavaScript compiler remains planned for v0.6.
 
 ## 17. Locked Design Decisions
@@ -665,4 +775,40 @@ Rules:
 
 ---
 
-**End of Wibufy Specification Draft 0.3**
+## 20. v0.4 Implementation Boundaries
+
+### Implemented in the v0.4 development build
+
+- General union annotations and union assignability.
+- Union normalization for nested and duplicate members.
+- Primitive `is` guards and complementary true/false branch narrowing.
+- Null equality and inequality narrowing in both branches.
+- Generic functions with inferred and explicit type arguments.
+- Multiple generic parameters and nested `Array<T>` inference.
+- Type aliases and generic type aliases.
+- Structural constraints on generic functions and generic aliases.
+- Contextual array typing for function parameters and explicitly annotated union arrays.
+- Regression coverage for v0.2 and v0.3 behavior.
+
+### Not included in v0.4
+
+- Modules, imports, and exports.
+- Standard-library expansion.
+- JavaScript compiler (planned for v0.6).
+- Classes, inheritance, and nominal subtyping.
+- Interface declarations.
+- Recursive type aliases.
+- Conditional and mapped types.
+- Variadic generics.
+- Runtime generic reflection.
+- Collection methods such as `push` and `pop`.
+- `break` and `continue`.
+- Compound-condition and structural-object type narrowing.
+
+### Development note
+
+The v0.4 build is a development release for testing. Both parsed type references and resolved semantic types use recursive structured representations. Canonical type keys are used only for identity and union normalization; semantic operations do not depend on parsing or comparing serialized type strings.
+
+---
+
+**End of Wibufy Specification Draft 0.4**

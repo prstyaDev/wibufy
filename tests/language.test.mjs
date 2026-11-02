@@ -62,8 +62,11 @@ test("newline or semicolon is required between statements", () => {
   assert.throws(() => compile("let a = 1 let b = 2"), /Expected a newline/);
 });
 
-test("nullable annotations accept only T | null in v0.2", () => {
-  assert.throws(() => compile("let value: string | number = \"x\""), /nullable types must use/);
+test("general union annotations are supported in v0.4", () => {
+  assert.deepEqual(run(`let value: string | number = 12
+value = "Wibufy"
+print(value)`), ["Wibufy"]);
+  assert.throws(() => compile(`let value: number | void = 1`), /void cannot be a member/);
 });
 
 test("semicolon terminators and symbolic logical operators work", () => {
@@ -421,4 +424,278 @@ test("for-in loop variable does not leak outside the loop", () => {
     () => compile("let values = [1]\nfor value in values { print(value) }\nprint(value)"),
     /undefined variable 'value'/,
   );
+});
+
+
+test("generic functions infer type arguments and preserve return types", () => {
+  assert.deepEqual(run(`
+fn identity<T>(value: T) -> T { return value }
+print(identity(42))
+print(identity("Wibufy"))
+`), ["42", "Wibufy"]);
+});
+
+test("generic functions accept explicit type arguments", () => {
+  assert.deepEqual(run(`
+fn identity<T>(value: T) -> T { return value }
+print(identity<number>(7))
+`), ["7"]);
+  assert.throws(() => compile(`
+fn identity<T>(value: T) -> T { return value }
+identity<string>(7)
+`), /expects string, got number/);
+});
+
+test("generic functions support multiple parameters and nested Array inference", () => {
+  assert.deepEqual(run(`
+fn first<T>(items: Array<T>) -> T { return items[0] }
+fn choose<A, B>(left: A, right: B) -> A { return left }
+print(first([3, 4]))
+print(choose("ok", 9))
+`), ["3", "ok"]);
+});
+
+test("generic parameters reused across parameters must infer consistently", () => {
+  assert.throws(() => compile(`
+fn same<T>(left: T, right: T) -> T { return left }
+same(1, "one")
+`), /cannot infer type arguments/);
+});
+
+test("type aliases resolve to their underlying structural type", () => {
+  assert.deepEqual(run(`
+type UserId = number
+let id: UserId = 123
+print(id)
+`), ["123"]);
+});
+
+test("generic type aliases substitute their type parameters", () => {
+  assert.deepEqual(run(`
+type Box<T> = { value: T }
+let box: Box<number> = { value: 88 }
+print(box.value)
+`), ["88"]);
+});
+
+test("generic structural constraints permit guaranteed property access", () => {
+  assert.deepEqual(run(`
+fn readValue<T extends { value: number }>(item: T) -> number {
+  return item.value
+}
+print(readValue({ value: 19, label: "ok" }))
+`), ["19"]);
+  assert.throws(() => compile(`
+fn readValue<T extends { value: number }>(item: T) -> number { return item.value }
+readValue({ label: "missing" })
+`), /does not satisfy constraint/);
+});
+
+test("primitive type guards narrow union types in both branches", () => {
+  assert.deepEqual(run(`
+fn show(value: number | string) -> void {
+  if value is number {
+    print(value + 2)
+  } else {
+    print(value + "!")
+  }
+}
+show(5)
+show("go")
+`), ["7", "go!"]);
+});
+
+test("null type guards narrow nullable unions", () => {
+  assert.deepEqual(run(`
+fn show(value: string | null) -> void {
+  if value is null {
+    print("empty")
+  } else {
+    print(value + "!")
+  }
+}
+show(null)
+show("hi")
+`), ["empty", "hi!"]);
+});
+
+test("invalid and unsupported primitive type guards are rejected", () => {
+  assert.throws(() => compile(`let value = 1
+if value is string { print(value) }`), /can never match/);
+});
+
+
+test("generic aliases enforce declared structural constraints", () => {
+  assert.deepEqual(run(`
+type NumericBox<T extends number> = { value: T }
+let box: NumericBox<number> = { value: 10 }
+print(box.value)
+`), ["10"]);
+  assert.throws(() => compile(`
+type NumericBox<T extends number> = { value: T }
+let box: NumericBox<string> = { value: "bad" }
+`), /does not satisfy constraint/);
+});
+
+test("type aliases support forward references and reject circular expansion", () => {
+  assert.deepEqual(run(`
+type First = Second
+type Second = number
+let value: First = 23
+print(value)
+`), ["23"]);
+  assert.throws(() => compile(`
+type First = Second
+type Second = First
+let value: First = 1
+`), /circular type alias/);
+});
+
+test("union normalization removes duplicate members and supports nested arrays", () => {
+  assert.deepEqual(run(`
+let values: number | string | number = "ok"
+print(values)
+let items: Array<number | string> = [1, "two"]
+print(items[1])
+`), ["ok", "two"]);
+});
+
+test("generic syntax does not break ordinary less-than comparisons", () => {
+  assert.deepEqual(run(`let a = 2
+let b = 3
+print(a < b)`), ["true"]);
+});
+
+test("type aliases are restricted to top-level declarations", () => {
+  assert.throws(() => compile(`if sugoi {
+  type Inner = number
+}`), /type aliases must be declared at top level/);
+});
+
+
+test("function parameters provide contextual types for empty arrays", () => {
+  assert.deepEqual(run(`
+fn count(items: Array<number>) -> number { return items.length }
+fn identity<T>(value: T) -> T { return value }
+print(count([]))
+print(identity<Array<number>>([]).length)
+`), ["0", "0"]);
+});
+
+
+test("reassignment inside a narrowed branch invalidates the previous narrowing", () => {
+  assert.deepEqual(run(`
+fn change(value: number | string) -> void {
+  let current: number | string = value
+  if current is number {
+    current = "changed"
+    print(current + "!")
+  }
+}
+change(1)
+`), ["changed!"]);
+});
+
+
+test("generic inference matches union members without depending on their order", () => {
+  assert.deepEqual(run(`
+fn isPresent<T>(value: T | null) -> boolean { return value != null }
+let maybe: string | null = "Wibufy"
+print(isPresent(42))
+print(isPresent(maybe))
+print(isPresent<string>(null))
+`), ["true", "true", "false"]);
+});
+
+test("never is assignable from unreachable narrowed branches", () => {
+  assert.deepEqual(run(`
+fn valueOrFallback(value: number) -> number {
+  if value is number { return value } else { return value }
+}
+print(valueOrFallback(7))
+`), ["7"]);
+});
+
+test("generic aliases validate constraints when declared", () => {
+  assert.throws(() => compile(`type Invalid<T extends Missing> = T
+print(1)`), /unknown type 'Missing'/);
+});
+
+
+test("null equality narrowing produces never for an impossible branch", () => {
+  assert.deepEqual(run(`
+fn describe(value: null) -> string {
+  if value != null { return "impossible" } else { return "empty" }
+}
+print(describe(null))
+`), ["empty"]);
+});
+
+
+test("object type annotations reject duplicate properties", () => {
+  assert.throws(() => compile(`let value: { name: string, name: number } = { name: "x" }`), /duplicate object type property 'name'/);
+});
+
+test("never remains an internal bottom type rather than a declared v0.4 type", () => {
+  assert.throws(() => compile(`let value: never = 1`), /unknown type 'never'/);
+});
+
+
+test("generic constraints can depend on other inferred type parameters", () => {
+  assert.deepEqual(run(`
+fn choose<A, B extends A>(base: A, candidate: B) -> B { return candidate }
+print(choose(10, 20))
+`), ["20"]);
+  assert.throws(() => compile(`
+fn choose<A, B extends A>(base: A, candidate: B) -> B { return candidate }
+choose(10, "wrong")
+`), /does not satisfy constraint/);
+});
+
+
+test("generic constraints are preserved across nested generic calls and aliases", () => {
+  assert.deepEqual(run(`
+type Box<T extends { value: number }> = { value: T }
+fn read<T extends { value: number }>(item: T) -> number { return item.value }
+fn relay<U extends { value: number }>(item: U) -> number {
+  let box: Box<U> = { value: item }
+  return read(box.value)
+}
+print(relay({ value: 5 }))
+`), ["5"]);
+});
+
+// Regression: primitive aliases must also work in runtime type guards.
+// Regression: generic aliases must substitute arguments in runtime guards.
+test("primitive type guards resolve generic aliases at runtime", () => {
+  assert.deepEqual(run(`
+type Identity<T> = T
+type Numeric<T> = Identity<T>
+fn increment(value: number | string) -> number {
+  if value is Numeric<number> { return value + 1 } else { return 0 }
+}
+print(increment(10))
+`), ["11"]);
+});
+
+test("primitive type guards resolve chained primitive aliases at runtime", () => {
+  assert.deepEqual(run(`
+type Numeric = number
+type Count = Numeric
+fn increment(value: number | string) -> number {
+  if value is Count { return value + 1 } else { return 0 }
+}
+print(increment(10))
+`), ["11"]);
+});
+
+// Regression: T must combine number and string from T | null.
+test("generic inference combines members of a multi-member nullable union", () => {
+  assert.deepEqual(run(`
+fn isPresent<T>(value: T | null) -> boolean { return value != null }
+let maybe: number | string | null = "Wibufy"
+print(isPresent(maybe))
+maybe = 42
+print(isPresent(maybe))
+`), ["true", "true"]);
 });

@@ -1,4 +1,4 @@
-import type { Expr, Stmt } from "./ast.js";
+import type { Expr, Stmt, TypeRef } from "./ast.js";
 import { formatDiagnostic } from "./diagnostics.js";
 type ObjectValue = { [key: string]: Value };
 type Value = string | number | boolean | null | WFunction | Value[] | ObjectValue;
@@ -16,13 +16,119 @@ class Environment {
 class WFunction { constructor(readonly declaration: Extract<Stmt, { kind: "function" }>, readonly closure: Environment) {} }
 export class Interpreter {
   private environment = new Environment();
+  private aliases = new Map<string, Extract<Stmt, { kind: "typeAlias" }>>();
   constructor(private readonly output: (value: string) => void = console.log, private readonly sourceName = "<source>", private readonly sourceText = "") {}
-  interpret(statements: Stmt[]): void { for (const s of statements) if (s.kind === "function") this.environment.define(s.name, new WFunction(s, this.environment), false); for (const s of statements) this.execute(s); }
+  interpret(statements: Stmt[]): void {
+    this.aliases = new Map(statements.filter((s): s is Extract<Stmt, { kind: "typeAlias" }> => s.kind === "typeAlias").map(s => [s.name, s]));
+    for (const s of statements) if (s.kind === "function") this.environment.define(s.name, new WFunction(s, this.environment), false);
+    for (const s of statements) this.execute(s);
+  }
+  private substituteRuntimeTypeRef(
+    ref: TypeRef,
+    substitutions: Map<string, TypeRef>,
+    resolving = new Set<string>(),
+  ): TypeRef {
+    if (typeof ref === "string") return ref;
+
+    switch (ref.kind) {
+      case "namedType": {
+        if (ref.arguments.length === 0 && substitutions.has(ref.name)) {
+          if (resolving.has(ref.name)) return ref;
+          const nextResolving = new Set(resolving);
+          nextResolving.add(ref.name);
+          return this.substituteRuntimeTypeRef(
+            substitutions.get(ref.name)!,
+            substitutions,
+            nextResolving,
+          );
+        }
+        return {
+          ...ref,
+          arguments: ref.arguments.map(argument =>
+            this.substituteRuntimeTypeRef(argument, substitutions, resolving),
+          ),
+        };
+      }
+      case "union":
+        return {
+          ...ref,
+          types: ref.types.map(type =>
+            this.substituteRuntimeTypeRef(type, substitutions, resolving),
+          ),
+        };
+      case "arrayType":
+        return {
+          ...ref,
+          element: this.substituteRuntimeTypeRef(ref.element, substitutions, resolving),
+        };
+      case "objectType":
+        return {
+          ...ref,
+          properties: ref.properties.map(property => ({
+            ...property,
+            type: this.substituteRuntimeTypeRef(property.type, substitutions, resolving),
+          })),
+        };
+    }
+  }
+  private resolveRuntimeType(
+    ref: TypeRef,
+    substitutions = new Map<string, TypeRef>(),
+    seenAliases = new Set<string>(),
+    resolvingParameters = new Set<string>(),
+  ): string | null {
+    if (typeof ref === "string") return ref;
+    if (ref.kind !== "namedType") return null;
+
+    if (ref.arguments.length === 0 && substitutions.has(ref.name)) {
+      if (resolvingParameters.has(ref.name)) return null;
+
+      const nextResolving = new Set(resolvingParameters);
+      nextResolving.add(ref.name);
+
+      return this.resolveRuntimeType(
+        substitutions.get(ref.name)!,
+        substitutions,
+        seenAliases,
+        nextResolving,
+      );
+    }
+
+    if (["number", "string", "boolean", "null"].includes(ref.name)) {
+      return ref.arguments.length === 0 ? ref.name : null;
+    }
+
+    const alias = this.aliases.get(ref.name);
+    if (
+      !alias ||
+      seenAliases.has(ref.name) ||
+      alias.typeParameters.length !== ref.arguments.length
+    ) {
+      return null;
+    }
+
+    const nextSubstitutions = new Map<string, TypeRef>();
+
+    alias.typeParameters.forEach((parameter, index) => {
+      nextSubstitutions.set(parameter.name, this.substituteRuntimeTypeRef(ref.arguments[index]!, substitutions));
+    });
+
+    const nextSeenAliases = new Set(seenAliases);
+    nextSeenAliases.add(ref.name);
+
+    return this.resolveRuntimeType(
+      alias.target,
+      nextSubstitutions,
+      nextSeenAliases,
+      new Set(),
+    );
+  }
   private execute(statement: Stmt): void {
     try { this.executeStatement(statement); } catch (error) { if (error instanceof ReturnSignal || error instanceof RuntimeDiagnosticError) throw error; const message = error instanceof Error ? error.message : String(error); const loc = statement.loc; if (!loc || !this.sourceText) throw new RuntimeDiagnosticError(message); throw new RuntimeDiagnosticError(formatDiagnostic("Runtime", this.sourceName, this.sourceText, loc.line, loc.column, message)); }
   }
   private executeStatement(s: Stmt): void {
     switch (s.kind) {
+      case "typeAlias": return;
       case "var": this.environment.define(s.name, this.evaluate(s.initializer), s.mutable); return;
       case "function": if (!this.environment.hasLocal(s.name)) this.environment.define(s.name, new WFunction(s, this.environment), false); return;
       case "return": throw new ReturnSignal(s.value ? this.evaluate(s.value) : null);
@@ -37,6 +143,15 @@ export class Interpreter {
   private evaluate(e: Expr): Value {
     switch (e.kind) {
       case "literal": return e.value as Value;
+      case "typeTest": {
+        const value = this.evaluate(e.value);
+        const target = this.resolveRuntimeType(e.type) ?? "";
+        if (target === "number") return typeof value === "number" && !Number.isNaN(value);
+        if (target === "string") return typeof value === "string";
+        if (target === "boolean") return typeof value === "boolean";
+        if (target === "null") return value === null;
+        throw new Error("Runtime type guards support only primitive types.");
+      }
       case "grouping": return this.evaluate(e.expression);
       case "variable": return this.environment.get(e.name);
       case "assign": { const value = this.evaluate(e.value); this.environment.assign(e.name, value); return value; }

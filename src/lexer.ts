@@ -4,7 +4,7 @@ import { formatDiagnostic } from "./diagnostics.js";
 const keywords: Record<string, TokenType> = {
   fn: "fn", koto: "fn",
   let: "let", const: "const", senpai: "const",
-  return: "return", print: "print", if: "if", else: "else", while: "while", for: "for", in: "in",
+  type: "type", extends: "extends", is: "is", return: "return", print: "print", if: "if", else: "else", while: "while", for: "for", in: "in",
   Array: "typeArray", Object: "typeObject",
   true: "true", sugoi: "true", false: "false", muri: "false", null: "null",
   number: "typeNumber", string: "typeString", boolean: "typeBoolean", void: "typeVoid",

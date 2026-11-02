@@ -1,0 +1,33 @@
+type Box<T> = { value: T }
+
+type UserId = number
+
+fn identity<T>(value: T) -> T {
+    return value
+}
+
+fn readValue<T extends { value: number }>(item: T) -> number {
+    return item.value
+}
+
+fn show(value: number | string | null) -> void {
+    if value is number {
+        print(value + 1)
+    } else {
+        if value is string {
+            print(value + "!")
+        } else {
+            print("empty")
+        }
+    }
+}
+
+let box: Box<number> = { value: 42 }
+let userId: UserId = 100
+
+print(identity(box.value))
+print(readValue(box))
+print(userId)
+show(10)
+show("Wibufy")
+show(null)
