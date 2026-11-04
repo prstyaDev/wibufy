@@ -1,6 +1,6 @@
 export type TokenType =
   | "number" | "string" | "identifier"
-  | "let" | "const" | "fn" | "type" | "extends" | "is" | "return" | "print" | "if" | "else" | "while" | "for" | "in"
+  | "let" | "const" | "fn" | "type" | "extends" | "is" | "return" | "print" | "if" | "else" | "while" | "for" | "in" | "import" | "export" | "as" | "from"
   | "true" | "false" | "null"
   | "typeNumber" | "typeString" | "typeBoolean" | "typeVoid" | "typeArray" | "typeObject"
   | "leftParen" | "rightParen" | "leftBrace" | "rightBrace" | "leftBracket" | "rightBracket"

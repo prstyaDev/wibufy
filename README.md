@@ -1,8 +1,8 @@
-# Wibufy v0.4.0-dev.2
+# Wibufy v0.5.0-dev.1
 
 Modern. Expressive. General-purpose.
 
-Wibufy is an experimental, statically typed general-purpose programming language implemented in TypeScript. Version 0.4 advances the type system with general unions, primitive type narrowing, generic functions, type aliases, generic aliases, and structural constraints while preserving the interpreter and data structures introduced in earlier milestones.
+Wibufy is an experimental, statically typed general-purpose programming language implemented in TypeScript. Version 0.5 adds a module system and built-in standard-library modules on top of the statically typed interpreter and advanced type system.
 
 ## Requirements
 
@@ -35,7 +35,7 @@ Or after building:
 node dist/cli.js run examples/hello.wbf
 ```
 
-## v0.4 language features
+## v0.5 language features
 
 - Lexer, parser, AST, static type checker, and tree-walk interpreter
 - `let` and `const` with mutability checks
@@ -54,7 +54,52 @@ node dist/cli.js run examples/hello.wbf
 - `for ... in` iteration over arrays
 - Optional semicolons with newline-based statement termination
 - Wibufy aliases: `koto`, `senpai`, `sugoi`, and `muri`
-- Automated regression tests preserving v0.2/v0.3 behavior
+- Named imports and namespace imports from relative `.wbf` modules
+- `export fn`, `export let`/`export const`, and `export type` declarations
+- Module caching, dependency-first initialization, and circular-dependency rejection
+- Read-only imported bindings with live access to exported mutable values
+- Standard library modules: `wibufy/fs`, `wibufy/json`, `wibufy/string`, `wibufy/math`, `wibufy/datetime`, and `wibufy/io`
+- Escaped string literals (`\"`, `\\`, `\n`, `\r`, `\t`, `\0`, and `\uXXXX`)
+- Automated regression tests preserving v0.2-v0.4 behavior
+
+
+## Modules
+
+A module is a `.wbf` file. Local imports use paths relative to the importing file:
+
+```wbf
+// math.wbf
+export const PI: number = 3.14159
+
+export fn add(a: number, b: number) -> number {
+  return a + b
+}
+```
+
+```wbf
+// main.wbf
+import { add, PI } from "./math.wbf"
+import * as math from "wibufy/math"
+
+print(add(20, 22))
+print(PI)
+print(math.sqrt(81))
+```
+
+Only exported declarations can be imported. Imports and exports are top-level only. Local module paths must be relative and end in `.wbf`. Each module is loaded and initialized once; dependencies initialize before the entry module. Circular dependencies are rejected. Imported bindings cannot be reassigned by the importing module.
+
+## Standard library
+
+| Module | Functions |
+|---|---|
+| `wibufy/fs` | `readText`, `writeText`, `exists`, `listDir` |
+| `wibufy/json` | `parse`, `stringify` |
+| `wibufy/string` | `trim`, `split`, `join`, `replace` |
+| `wibufy/math` | `abs`, `sqrt`, `floor`, `ceil`, `round`, `pow` |
+| `wibufy/datetime` | `now`, `parse`, `toISOString` |
+| `wibufy/io` | `readLine`, `write`, `writeLine` |
+
+The interpreter is synchronous. `datetime.now()` returns a Unix timestamp in milliseconds; `datetime.parse()` accepts a date/time string and returns a timestamp in milliseconds; `datetime.toISOString()` converts a timestamp to ISO 8601. `wibufy/json` exposes a safe `JsonValue` alias without using `any`; in this development release its static alias covers primitives, primitive arrays, and opaque object values. Dynamic property access on parsed JSON objects is not yet supported by the static type system.
 
 ## Generic function example
 
@@ -110,9 +155,14 @@ Aliases are reserved keywords and normalize to the same token and AST behavior a
 
 Wibufy reports lexer, parser, type, and runtime errors. Diagnostics include source location and a code-frame pointer when location information is available. Type errors are detected before interpreter execution.
 
-## Current v0.4 development boundaries
+## Current v0.5 development boundaries
 
 - Function and type-alias declarations are top-level only.
+- Imports and exports are top-level only; default exports are not supported.
+- Local imports must use relative `.wbf` paths; package resolution is deferred to v0.8.
+- Circular module dependencies are rejected.
+- Imported bindings are read-only; module exports remain live references.
+- The JSON type alias is intentionally non-recursive until recursive type aliases are designed.
 - Primitive type guards support only `number`, `string`, `boolean`, and `null`.
 - Narrowing is limited to direct variable checks; compound conditions and structural object guards are not supported.
 - Recursive type aliases, classes, inheritance, interfaces, conditional/mapped types, and variadic generics are not supported.

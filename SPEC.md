@@ -1,7 +1,7 @@
 # Wibufy Language Specification
-## Draft 0.4
+## Draft 0.5
 
-**Status:** v0.4.0-dev.2 development draft
+**Status:** v0.5.0-dev.1 development draft
 **Language:** Wibufy
 **File extension:** `.wbf`
 **Implementation language:** TypeScript
@@ -568,13 +568,17 @@ Alias normalization belongs in the frontend. For example, `koto` and `fn` should
 - Improved compile-time diagnostics.
 - Regression and backward-compatibility tests.
 ### v0.5.0 — Modules and Standard Library
-- Module system.
-- Import and export.
-- File system APIs.
-- JSON support.
-- String and math utilities.
-- Date/time utilities.
-- Basic I/O.
+- [x] Module system with relative `.wbf` resolution.
+- [x] Named imports and namespace imports.
+- [x] Exported functions, variables/constants, and type aliases.
+- [x] Module cache and dependency-first initialization.
+- [x] Circular dependency rejection and read-only imported bindings.
+- [x] File system APIs (`wibufy/fs`).
+- [x] JSON support (`wibufy/json`).
+- [x] String and math utilities (`wibufy/string`, `wibufy/math`).
+- [x] Date/time utilities (`wibufy/datetime`).
+- [x] Basic I/O (`wibufy/io`).
+- [x] Module and standard-library regression tests.
 
 ### v0.6.0 — JavaScript Compiler
 - AST-to-JavaScript compiler.
@@ -811,4 +815,51 @@ The v0.4 build is a development release for testing. Both parsed type references
 
 ---
 
-**End of Wibufy Specification Draft 0.4**
+**End of Wibufy Specification Draft 0.5**
+
+
+## 21. v0.5 Module System and Standard Library
+
+### 21.1 Module syntax
+
+```wbf
+export fn add(a: number, b: number) -> number { return a + b }
+export const PI: number = 3.14159
+export type User = { name: string }
+
+import { add, PI } from "./math.wbf"
+import * as math from "wibufy/math"
+```
+
+Imports and exports are restricted to module top level. Named imports may be renamed with `as`. Namespace imports expose exported values through `namespace.member`. Default exports are not part of v0.5. Only exported declarations are visible to importing modules.
+
+### 21.2 Resolution and initialization
+
+- Local module paths are resolved relative to the importing file and must end in `.wbf`.
+- `wibufy/*` names resolve to built-in standard-library modules.
+- Modules are cached by resolved path and initialized once per program execution.
+- Dependencies are validated and initialized before the entry module.
+- Circular dependencies are rejected with a module diagnostic.
+- Imported bindings cannot be reassigned by the importing module; exported mutable values remain shared live bindings.
+- All loaded modules are type-checked before any module body executes.
+
+### 21.3 Standard-library modules
+
+| Module | API |
+|---|---|
+| `wibufy/fs` | `readText(path)`, `writeText(path, content)`, `exists(path)`, `listDir(path)` |
+| `wibufy/json` | `parse(text)`, `stringify(value)` |
+| `wibufy/string` | `trim(value)`, `split(value, separator)`, `join(values, separator)`, `replace(value, search, replacement)` |
+| `wibufy/math` | `abs`, `sqrt`, `floor`, `ceil`, `round`, `pow` |
+| `wibufy/datetime` | `now`, `parse`, `toISOString` |
+| `wibufy/io` | `readLine`, `write`, `writeLine` |
+
+The standard library is synchronous. Date/time values are Unix timestamps in milliseconds. `wibufy/json` uses an exported `JsonValue` type alias rather than `any`; the v0.5 alias intentionally avoids recursive aliases, which remain outside this milestone. Parsed JSON objects are opaque to static property access in this release, but can be retained and passed to `stringify`.
+
+### 21.4 v0.5 boundaries
+
+- No default exports, dynamic imports, or package-name resolution.
+- No package manager or dependency registry (planned for v0.8).
+- No asynchronous I/O or `async`/`await`.
+- Recursive type aliases remain unsupported.
+- The JavaScript compiler remains planned for v0.6.

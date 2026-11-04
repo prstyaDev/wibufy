@@ -8,7 +8,7 @@ const keywords: Record<string, TokenType> = {
   Array: "typeArray", Object: "typeObject",
   true: "true", sugoi: "true", false: "false", muri: "false", null: "null",
   number: "typeNumber", string: "typeString", boolean: "typeBoolean", void: "typeVoid",
-  and: "and", or: "or",
+  and: "and", or: "or", import: "import", export: "export", as: "as", from: "from",
 };
 
 export class Lexer {
@@ -60,12 +60,32 @@ export class Lexer {
   }
 
   private string(): void {
+    let value = "";
     while (this.peek() !== '"' && !this.end()) {
-      this.advance();
+      const character = this.advance();
+      if (character !== "\\") { value += character; continue; }
+      if (this.end()) throw this.error("Unterminated escape sequence.");
+      const escaped = this.advance();
+      switch (escaped) {
+        case '"': value += '"'; break;
+        case "\\": value += "\\"; break;
+        case "n": value += "\n"; break;
+        case "r": value += "\r"; break;
+        case "t": value += "\t"; break;
+        case "0": value += "\0"; break;
+        case "u": {
+          const digits = this.source.slice(this.current, this.current + 4);
+          if (!/^[0-9a-fA-F]{4}$/.test(digits)) throw this.error("Invalid Unicode escape; expected four hexadecimal digits.");
+          for (let i = 0; i < 4; i++) this.advance();
+          value += String.fromCharCode(parseInt(digits, 16));
+          break;
+        }
+        default: throw this.error(`Unsupported escape sequence '\\${escaped}'.`);
+      }
     }
     if (this.end()) throw this.error("Unterminated string.");
     this.advance();
-    this.tokens.push({ type: "string", lexeme: this.source.slice(this.start, this.current), literal: this.source.slice(this.start + 1, this.current - 1), line: this.startLine, column: this.startColumn });
+    this.tokens.push({ type: "string", lexeme: this.source.slice(this.start, this.current), literal: value, line: this.startLine, column: this.startColumn });
   }
 
   private number(): void {

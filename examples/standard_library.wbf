@@ -1,0 +1,12 @@
+import * as math from "wibufy/math"
+import * as text from "wibufy/string"
+import * as json from "wibufy/json"
+import * as datetime from "wibufy/datetime"
+
+let cleaned = text.trim("  Wibufy  ")
+let parsed = json.parse("{\"language\":\"Wibufy\"}")
+
+print(math.pow(2, 5))
+print(cleaned)
+print(json.stringify(parsed))
+print(datetime.toISOString(datetime.parse("2026-01-02T03:04:05.000Z")))
