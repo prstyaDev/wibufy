@@ -24,7 +24,7 @@ export type Expr =
 export interface SourceLocation { line: number; column: number }
 export type Stmt = (
   | { kind: "var"; name: string; annotation?: TypeRef; initializer: Expr; mutable: boolean }
-  | { kind: "function"; name: string; typeParameters: TypeParameter[]; params: { name: string; type: TypeRef }[]; returnType: TypeRef; body: Stmt[] }
+  | { kind: "function"; name: string; typeParameters: TypeParameter[]; params: { name: string; type: TypeRef }[]; returnType: TypeRef; body: Stmt[]; native?: string }
   | { kind: "typeAlias"; name: string; typeParameters: TypeParameter[]; target: TypeRef }
   | { kind: "return"; value?: Expr }
   | { kind: "print"; expression: Expr }
@@ -33,4 +33,5 @@ export type Stmt = (
   | { kind: "if"; condition: Expr; thenBranch: Stmt; elseBranch?: Stmt }
   | { kind: "while"; condition: Expr; body: Stmt }
   | { kind: "forIn"; name: string; iterable: Expr; body: Stmt }
-) & { loc?: SourceLocation };
+  | { kind: "import"; source: string; specifiers: { imported: string; local: string }[]; namespace?: string }
+) & { loc?: SourceLocation; exported?: boolean };

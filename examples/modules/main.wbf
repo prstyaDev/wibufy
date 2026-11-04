@@ -1,0 +1,10 @@
+import { add, PI } from "./math.wbf"
+import * as greetings from "./greetings.wbf"
+import * as math from "wibufy/math"
+import { trim } from "wibufy/string"
+
+print(add(20, 22))
+print(PI)
+print(greetings.greet("Wibufy"))
+print(math.sqrt(81))
+print(trim("  modules  "))

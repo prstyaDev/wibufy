@@ -233,6 +233,7 @@ export class TypeChecker {
   }
   private statementCore(s: Stmt): void {
     switch (s.kind) {
+      case "import": throw new Error("Type error: imports must be resolved by the module loader before type checking.");
       case "typeAlias": if (this.scopes.length !== 1) throw new Error("Type error: type aliases must be declared at top level."); return;
       case "var": {
         if (this.scopes.length === 1 && this.functions.has(s.name)) throw new Error(`Type error: '${s.name}' conflicts with a function declaration.`);

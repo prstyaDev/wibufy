@@ -699,3 +699,7 @@ maybe = 42
 print(isPresent(maybe))
 `), ["true", "true"]);
 });
+
+test("string literals decode escaped quotes, slashes, and control characters", () => {
+  assert.deepEqual(run(`print("quote: \\\"Wibufy\\\"")\nprint("line1\\nline2")\nprint("slash: \\\\")`), ["quote: \"Wibufy\"", "line1\nline2", "slash: \\"]);
+});

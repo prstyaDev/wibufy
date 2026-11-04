@@ -8,12 +8,44 @@ export class Parser {
   parse(): Stmt[] { const out: Stmt[] = []; this.skipNewlines(); while (!this.check("eof")) { out.push(this.declaration()); this.skipNewlines(); } return out; }
   private declaration(): Stmt {
     const start = this.peek(); let result: Stmt;
-    if (this.match("fn")) result = this.functionDeclaration();
+    if (this.match("import")) result = this.importDeclaration();
+    else if (this.match("export")) {
+      if (this.match("fn")) result = this.functionDeclaration();
+      else if (this.match("type")) result = this.typeAliasDeclaration();
+      else if (this.match("let")) result = this.variableDeclaration(true);
+      else if (this.match("const")) result = this.variableDeclaration(false);
+      else throw this.error(this.peek(), "Expected fn, let, const, or type after 'export'.");
+      result.exported = true;
+    }
+    else if (this.match("fn")) result = this.functionDeclaration();
     else if (this.match("type")) result = this.typeAliasDeclaration();
     else if (this.match("let")) result = this.variableDeclaration(true);
     else if (this.match("const")) result = this.variableDeclaration(false);
     else result = this.statement();
     result.loc = { line: start.line, column: start.column }; return result;
+  }
+  private importDeclaration(): Stmt {
+    const specifiers: { imported: string; local: string }[] = [];
+    let namespace: string | undefined;
+    if (this.match("star")) {
+      this.consume("as", "Expected 'as' after '*'.");
+      namespace = this.consume("identifier", "Expected namespace import name.").lexeme;
+    } else {
+      this.consume("leftBrace", "Expected '{' or '*' after import.");
+      this.skipNewlines();
+      if (!this.check("rightBrace")) do {
+        const imported = this.consume("identifier", "Expected imported name.").lexeme;
+        const local = this.match("as") ? this.consume("identifier", "Expected local import name after 'as'.").lexeme : imported;
+        specifiers.push({ imported, local });
+        this.skipNewlines();
+      } while (this.match("comma") && (this.skipNewlines(), true));
+      this.consume("rightBrace", "Expected '}' after import specifiers.");
+    }
+    this.consume("from", "Expected 'from' after import specifiers.");
+    const source = this.consume("string", "Expected module path string after 'from'.").literal;
+    if (typeof source !== "string") throw this.error(this.previous(), "Module path must be a string.");
+    this.consumeTerminator();
+    return namespace ? { kind: "import", source, specifiers, namespace } : { kind: "import", source, specifiers };
   }
   private typeParameters(): import("./ast.js").TypeParameter[] {
     const params: import("./ast.js").TypeParameter[] = [];
