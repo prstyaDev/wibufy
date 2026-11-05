@@ -1,0 +1,20 @@
+fn multiply(value: number, factor: number) -> number {
+    return value * factor
+}
+
+const scores: Array<number> = [12, 18, 20]
+let total: number = 0
+
+for score in scores {
+    total = total + score
+}
+
+const report = {
+    language: "Wibufy",
+    total: total,
+    doubled: multiply(total, 2)
+}
+
+print(report.language)
+print(report.total)
+print(report.doubled)

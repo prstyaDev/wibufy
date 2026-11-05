@@ -1,8 +1,8 @@
-# Wibufy v0.5.0-dev.1
+# Wibufy v0.6.0-dev.2
 
 Modern. Expressive. General-purpose.
 
-Wibufy is an experimental, statically typed general-purpose programming language implemented in TypeScript. Version 0.5 adds a module system and built-in standard-library modules on top of the statically typed interpreter and advanced type system.
+Wibufy is an experimental, statically typed general-purpose programming language implemented in TypeScript. Version 0.6 introduces the first JavaScript compiler backend while preserving the tree-walk interpreter, module system, advanced type system, and standard library.
 
 ## Requirements
 
@@ -35,7 +35,7 @@ Or after building:
 node dist/cli.js run examples/hello.wbf
 ```
 
-## v0.5 language features
+## Language features through v0.5
 
 - Lexer, parser, AST, static type checker, and tree-walk interpreter
 - `let` and `const` with mutability checks
@@ -99,7 +99,7 @@ Only exported declarations can be imported. Imports and exports are top-level on
 | `wibufy/datetime` | `now`, `parse`, `toISOString` |
 | `wibufy/io` | `readLine`, `write`, `writeLine` |
 
-The interpreter is synchronous. `datetime.now()` returns a Unix timestamp in milliseconds; `datetime.parse()` accepts a date/time string and returns a timestamp in milliseconds; `datetime.toISOString()` converts a timestamp to ISO 8601. `wibufy/json` exposes a safe `JsonValue` alias without using `any`; in this development release its static alias covers primitives, primitive arrays, and opaque object values. Dynamic property access on parsed JSON objects is not yet supported by the static type system.
+The interpreter and initial compiler runtime are synchronous. `datetime.now()` returns a Unix timestamp in milliseconds; `datetime.parse()` accepts a date/time string and returns a timestamp in milliseconds; `datetime.toISOString()` converts a timestamp to ISO 8601. `wibufy/json` exposes a safe `JsonValue` alias without using `any`; in this development release its static alias covers primitives, primitive arrays, and opaque object values. Dynamic property access on parsed JSON objects is not yet supported by the static type system.
 
 ## Generic function example
 
@@ -155,7 +155,7 @@ Aliases are reserved keywords and normalize to the same token and AST behavior a
 
 Wibufy reports lexer, parser, type, and runtime errors. Diagnostics include source location and a code-frame pointer when location information is available. Type errors are detected before interpreter execution.
 
-## Current v0.5 development boundaries
+## Current language boundaries
 
 - Function and type-alias declarations are top-level only.
 - Imports and exports are top-level only; default exports are not supported.
@@ -169,7 +169,20 @@ Wibufy reports lexer, parser, type, and runtime errors. Diagnostics include sour
 - `for ... in` iterates arrays only.
 - Empty arrays require an explicit `Array<T>` annotation.
 - Array methods such as `push` and `pop`, `break`, and `continue` are not implemented.
-- The JavaScript compiler is planned for v0.6; v0.4 runs through the tree-walk interpreter.
+- The initial JavaScript compiler targets Node.js. Source maps, browser/Deno/Bun targets, advanced optimization, and full JavaScript interoperability remain future work.
 - Type syntax and semantic types both use recursive structured representations. Canonical type keys are used only for identity and union deduplication; assignability, inference, substitution, and narrowing operate on structured nodes.
 
 See [SPEC.md](SPEC.md) for the detailed language specification and roadmap.
+
+## JavaScript Compiler (v0.6)
+
+Wibufy can compile a checked `.wbf` entry module and its dependencies to executable JavaScript for Node.js:
+
+```bash
+npm run dev -- build examples/compiler.wbf
+node dist/build/compiler.js
+```
+
+Use `--out <file.js>` (or `-o`) to choose a different output path. The compiler reuses the existing lexer, parser, module loader, and type checker; it emits JavaScript from the resolved AST. The tree-walk interpreter remains available with `wibufy run <file.wbf>`.
+
+The first compiler release targets Node.js. Browser, Deno, and Bun runtimes are future compatibility targets, not part of the current v0.6 guarantee. Source maps and full source-aware generated-code diagnostics are still under development.

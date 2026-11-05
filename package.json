@@ -1,9 +1,9 @@
 {
   "name": "wibufy",
-  "version": "0.5.0-dev.1",
+  "version": "0.6.0-dev.2",
   "private": true,
   "type": "module",
-  "description": "Wibufy programming language: statically typed interpreter with modules, standard library, unions, and generics",
+  "description": "Wibufy programming language with a tree-walk interpreter and JavaScript compiler",
   "scripts": {
     "dev": "tsx src/cli.ts",
     "build": "tsc",
