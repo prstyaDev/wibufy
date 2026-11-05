@@ -98,7 +98,7 @@ export class Lexer {
   private identifier(): void {
     while (this.alphaNum(this.peek())) this.advance();
     const text = this.source.slice(this.start, this.current);
-    this.add(keywords[text] ?? "identifier");
+    this.add(Object.hasOwn(keywords, text) ? keywords[text]! : "identifier");
   }
 
   private add(type: TokenType): void {

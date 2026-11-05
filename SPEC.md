@@ -1,7 +1,7 @@
 # Wibufy Language Specification
-## Draft 0.5
+## Draft 0.6
 
-**Status:** v0.5.0-dev.1 development draft
+**Status:** v0.6.0-dev.2 development draft
 **Language:** Wibufy
 **File extension:** `.wbf`
 **Implementation language:** TypeScript
@@ -491,7 +491,7 @@ A future release will introduce a standardized error handling model.
 
 ## 12. Execution Model
 
-Wibufy is designed for two execution paths, but v0.2 implements the interpreter only.
+Wibufy provides two execution paths: the tree-walk interpreter and the JavaScript compiler. The initial compiler backend is introduced in v0.6.
 
 ### Interpreter (v0.2)
 
@@ -501,7 +501,7 @@ The CLI lexes, parses, statically checks, and then evaluates the program using a
 npm run dev -- run main.wbf
 ```
 
-### JavaScript compiler (planned for v0.6)
+### JavaScript compiler (introduced in v0.6)
 
 The first compiler backend will target JavaScript. It must preserve Wibufy semantics, including type checking, variable behavior, function calls, and runtime behavior.
 
@@ -520,7 +520,7 @@ The intended architecture is:
 
 Execution backends:
 - Tree-walk interpreter (implemented in v0.2).
-- JavaScript compiler (planned for v0.6).
+- JavaScript compiler (introduced in v0.6).
 
 The frontend and semantic analysis are designed to be shared by both backends.
 
@@ -580,13 +580,16 @@ Alias normalization belongs in the frontend. For example, `koto` and `fn` should
 - [x] Basic I/O (`wibufy/io`).
 - [x] Module and standard-library regression tests.
 
-### v0.6.0 — JavaScript Compiler
-- AST-to-JavaScript compiler.
-- JavaScript runtime integration.
-- Source maps.
-- Build command.
-- Compiler diagnostics.
-- Interpreter/compiler compatibility tests.
+### v0.6.0 — JavaScript Compiler (in development)
+- [x] AST-to-JavaScript compiler foundation.
+- [x] Node.js ECMAScript-module output.
+- [x] Build command with custom output path.
+- [x] Reuse module loader and static type checker before code generation.
+- [x] Initial standard-library native-function backend.
+- [x] Compiler regression tests for core language constructs and modules.
+- [ ] Source maps and source-aware generated-code diagnostics.
+- [ ] Broader interpreter/compiler semantic parity coverage.
+- [ ] Runtime hardening and additional CLI polish.
 
 ### v0.7.0 — Developer Tools
 - REPL.
@@ -633,7 +636,7 @@ Known v0.2 limitations:
 - Nullable narrowing currently handles direct `value != null` checks in the true branch of an `if` statement.
 - General union types, generic functions, and aliases are introduced in v0.4. Modules and standard-library modules remain future work.
 - Semantic/type diagnostics currently anchor errors to the containing statement rather than the exact expression token.
-- The JavaScript compiler is not part of v0.2 and is planned for v0.6.
+- The JavaScript compiler was not part of v0.2; it is introduced in v0.6.
 
 ## 16. v0.3 Implementation Boundaries
 
@@ -655,7 +658,7 @@ Known v0.3 boundaries:
 - Collection methods such as `push` and `pop` are not implemented.
 - `break` and `continue` are not implemented.
 - Generic functions, user-defined type aliases, and generic aliases are introduced in v0.4.
-- The JavaScript compiler remains planned for v0.6.
+- The JavaScript compiler is introduced in v0.6; its first backend targets Node.js.
 
 ## 17. Locked Design Decisions
 
@@ -775,7 +778,7 @@ Rules:
 - Array and object values are supported by the interpreter and static type checker.
 - Generic collections groundwork is limited to the built-in `Array<T>` type; generic functions and user-defined generic types are deferred to v0.4.
 - Collection methods such as `push` and `pop`, `break`, and `continue` are not part of v0.3.
-- The JavaScript compiler remains planned for v0.6.
+- The JavaScript compiler is introduced in v0.6; its first backend targets Node.js.
 
 ---
 
@@ -798,7 +801,7 @@ Rules:
 
 - Modules, imports, and exports.
 - Standard-library expansion.
-- JavaScript compiler (planned for v0.6).
+- JavaScript compiler (introduced in v0.6).
 - Classes, inheritance, and nominal subtyping.
 - Interface declarations.
 - Recursive type aliases.
@@ -862,4 +865,17 @@ The standard library is synchronous. Date/time values are Unix timestamps in mil
 - No package manager or dependency registry (planned for v0.8).
 - No asynchronous I/O or `async`/`await`.
 - Recursive type aliases remain unsupported.
-- The JavaScript compiler remains planned for v0.6.
+- The JavaScript compiler is introduced in v0.6; its first backend targets Node.js.
+
+
+## 18. JavaScript Compiler (Draft 0.6)
+
+The v0.6 compiler translates the module-loader-resolved Wibufy AST into executable JavaScript using the same type checker as interpreted execution. Compilation fails before code generation when static type checking fails.
+
+The initial supported runtime is Node.js. The compiler emits an ECMAScript module, preserves module initialization order by compiling the flattened dependency-first module graph, and provides JavaScript implementations for the v0.5 standard-library native functions. Wibufy type annotations, aliases, imports, and exports are erased or resolved during compilation.
+
+The CLI supports `wibufy build <file.wbf> [--out <file.js>]`. Without `--out`, output is written to `dist/build/<entry-name>.js`. The interpreter remains supported through `wibufy run <file.wbf>`.
+
+The first backend preserves Wibufy array bounds checks, loop safety limits, print formatting, and primitive runtime type guards. Source maps, browser output, Deno/Bun runtime guarantees, advanced optimization, and dynamic JavaScript interop are not included in this initial compiler scope.
+
+**End of Wibufy Specification Draft 0.6**
