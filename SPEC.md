@@ -580,7 +580,7 @@ Alias normalization belongs in the frontend. For example, `koto` and `fn` should
 - [x] Basic I/O (`wibufy/io`).
 - [x] Module and standard-library regression tests.
 
-### v0.6.0 — JavaScript Compiler (in development)
+### v0.6.0 — JavaScript Compiler (completed)
 - [x] AST-to-JavaScript compiler foundation.
 - [x] Node.js ECMAScript-module output.
 - [x] Build command with custom output path.
@@ -591,14 +591,14 @@ Alias normalization belongs in the frontend. For example, `koto` and `fn` should
 - [ ] Broader interpreter/compiler semantic parity coverage.
 - [ ] Runtime hardening and additional CLI polish.
 
-### v0.7.0 — Developer Tools
-- REPL.
-- Formatter.
-- Linter.
-- Language Server Protocol.
-- VS Code extension.
-- Syntax highlighting.
-- Debugging support.
+### v0.7.0 — Developer Tools (in development)
+- [x] Initial VS Code language extension for `.wbf` files.
+- [x] Custom Wibufy file icon, syntax highlighting, bracket matching, indentation, and snippets.
+- [ ] REPL.
+- [ ] Formatter.
+- [ ] Linter.
+- [ ] Language Server Protocol and editor diagnostics.
+- [ ] Debugging support.
 
 ### v0.8.0 — Package Ecosystem
 - Package manager.
@@ -879,3 +879,27 @@ The CLI supports `wibufy build <file.wbf> [--out <file.js>]`. Without `--out`, o
 The first backend preserves Wibufy array bounds checks, loop safety limits, print formatting, and primitive runtime type guards. Source maps, browser output, Deno/Bun runtime guarantees, advanced optimization, and dynamic JavaScript interop are not included in this initial compiler scope.
 
 **End of Wibufy Specification Draft 0.6**
+
+
+## 19. v0.7 Developer Tools (Draft 0.7)
+
+The v0.7 milestone improves the programming experience without changing Wibufy's language semantics or compiler/interpreter architecture. Development increment dev.1 provides an initial VS Code extension in `editor/vscode`: `.wbf` language registration, a custom file icon, TextMate syntax highlighting, comment/bracket/quote configuration, indentation rules, and starter snippets.
+
+Development increment dev.2 adds the first CLI formatter. `wibufy format <file.wbf>` prints formatted source; `wibufy format <file.wbf> --write` updates the source file after lexing and parsing the formatted result successfully. The formatter normalizes whitespace, operators, commas, blocks, and indentation while preserving original token spelling, aliases, and string contents. It is intentionally a first formatter: standalone comment lines and configurable formatting profiles are not yet supported.
+
+The editor extension remains separate from the TypeScript compiler and interpreter. An interactive REPL, richer integrated diagnostics, and debugging remain planned v0.7 work.
+
+**End of Wibufy Specification Draft 0.7**
+
+
+## v0.7 Developer Tools — Better Diagnostics (dev.4)
+
+The CLI provides `wibufy repl` (or `npm run dev -- repl`) for interactive execution. Each completed submission is parsed and type-checked together with prior successful submissions, while only the new statements are executed. Runtime bindings therefore persist without re-running earlier side effects. Standalone expression statements display their resulting value. Multiline blocks are supported. `.help` displays commands and `.exit` ends the session. Imports and exports are currently unsupported in the REPL.
+
+
+### Better diagnostics (v0.7.0-dev.4)
+
+- Diagnostics show the source line before and after the failing line when available.
+- Caret positions are clamped to valid source coordinates, including end-of-file errors.
+- Common lexer, parser, type, and runtime mistakes receive concise, actionable help suggestions.
+- Suggestions are omitted when the diagnostic does not have a reliable fix recommendation.

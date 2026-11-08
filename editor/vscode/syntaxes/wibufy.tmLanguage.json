@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Wibufy",
+  "scopeName": "source.wibufy",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#constants" },
+    { "include": "#functions" }
+  ],
+  "repository": {
+    "comments": { "patterns": [{ "name": "comment.line.double-slash.wibufy", "match": "//.*$" }] },
+    "strings": { "name": "string.quoted.double.wibufy", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.wibufy", "match": "\\\\." }] },
+    "numbers": { "name": "constant.numeric.wibufy", "match": "\\b[0-9]+(?:\\.[0-9]+)?\\b" },
+    "keywords": { "name": "keyword.control.wibufy", "match": "\\b(?:fn|koto|let|const|senpai|type|extends|is|return|if|else|while|for|in|import|export|as|from|and|or)\\b" },
+    "types": { "name": "storage.type.wibufy", "match": "\\b(?:number|string|boolean|void|null|Array|Object)\\b" },
+    "constants": { "name": "constant.language.wibufy", "match": "\\b(?:true|false|null|sugoi|muri)\\b" },
+    "functions": { "patterns": [{ "name": "entity.name.function.wibufy", "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()" }] }
+  }
+}

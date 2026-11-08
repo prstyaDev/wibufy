@@ -1,0 +1,47 @@
+{
+  "name": "wibufy-language",
+  "displayName": "Wibufy Language Support",
+  "description": "Language support for Wibufy source files (.wbf).",
+  "version": "0.7.0-dev.4",
+  "publisher": "wibufy",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "wibufy",
+        "aliases": [
+          "Wibufy",
+          "wbf"
+        ],
+        "extensions": [
+          ".wbf"
+        ],
+        "configuration": "language-configuration.json",
+        "icon": {
+          "light": "icons/wibufy.png",
+          "dark": "icons/wibufy.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "wibufy",
+        "scopeName": "source.wibufy",
+        "path": "./syntaxes/wibufy.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "wibufy",
+        "path": "./snippets/wibufy.json"
+      }
+    ]
+  }
+}

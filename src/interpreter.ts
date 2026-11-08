@@ -22,7 +22,7 @@ export class Interpreter {
   private aliases = new Map<string, Extract<Stmt, { kind: "typeAlias" }>>();
   constructor(private readonly output: (value: string) => void = console.log, private readonly sourceName = "<source>", private readonly sourceText = "") {}
   interpret(statements: Stmt[]): void {
-    this.aliases = new Map(statements.filter((s): s is Extract<Stmt, { kind: "typeAlias" }> => s.kind === "typeAlias").map(s => [s.name, s]));
+    for (const alias of statements) if (alias.kind === "typeAlias") this.aliases.set(alias.name, alias);
     for (const s of statements) if (s.kind === "function") this.environment.define(s.name, s.native ? new WNativeFunction(s.native) : new WFunction(s, this.environment), false);
     for (const s of statements) this.execute(s);
   }

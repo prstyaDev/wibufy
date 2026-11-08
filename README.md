@@ -1,8 +1,8 @@
-# Wibufy v0.6.0-dev.2
+# Wibufy v0.7.0-dev.4
 
 Modern. Expressive. General-purpose.
 
-Wibufy is an experimental, statically typed general-purpose programming language implemented in TypeScript. Version 0.6 introduces the first JavaScript compiler backend while preserving the tree-walk interpreter, module system, advanced type system, and standard library.
+Wibufy is an experimental, statically typed general-purpose programming language implemented in TypeScript. Version 0.7 development begins the developer-tools milestone, building on the JavaScript compiler, tree-walk interpreter, module system, advanced type system, and standard library.
 
 ## Requirements
 
@@ -34,6 +34,16 @@ Or after building:
 ```bash
 node dist/cli.js run examples/hello.wbf
 ```
+
+## Interactive REPL
+
+Start an interactive Wibufy session:
+
+```bash
+npm run dev -- repl
+```
+
+Enter expressions, declarations, and functions directly. Declarations remain available between submissions, and standalone expressions print their result. Multiline blocks are supported. Use `.help` for commands and `.exit` to leave the session. Module imports and exports are not available inside the REPL yet.
 
 ## Language features through v0.5
 
@@ -186,3 +196,17 @@ node dist/build/compiler.js
 Use `--out <file.js>` (or `-o`) to choose a different output path. The compiler reuses the existing lexer, parser, module loader, and type checker; it emits JavaScript from the resolved AST. The tree-walk interpreter remains available with `wibufy run <file.wbf>`.
 
 The first compiler release targets Node.js. Browser, Deno, and Bun runtimes are future compatibility targets, not part of the current v0.6 guarantee. Source maps and full source-aware generated-code diagnostics are still under development.
+
+
+## Developer tools (v0.7 dev.2)
+
+The VS Code extension in [`editor/vscode`](editor/vscode) registers `.wbf` files as Wibufy and provides syntax highlighting, a custom file icon, bracket/quote matching, indentation rules, and starter snippets.
+
+A first source formatter is available through the CLI:
+
+```bash
+npm run dev -- format examples/hello.wbf
+npm run dev -- format examples/hello.wbf --write
+```
+
+Without `--write`, formatted source is printed to standard output. With `--write`, the file is updated only after the formatted result passes the Wibufy lexer and parser. The formatter preserves keyword aliases and string literal contents. This is an initial formatter; comment-only lines and advanced formatting preferences remain future refinements. The interactive REPL and richer diagnostics are still planned for v0.7.

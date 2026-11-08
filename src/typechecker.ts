@@ -133,7 +133,9 @@ export class TypeChecker {
   private diagnostic(message: string, statement?: Stmt): Error {
     const loc = statement?.loc;
     if (!loc) return new Error(`[Wibufy Type Error] ${message}`);
-    return new Error(formatDiagnostic("Type", this.sourceName, this.sourceText, loc.line, loc.column, message));
+    const readableMessage = message.replace(/\b__m\d+_([A-Za-z_]\w*)/g, "$1");
+    const readableSource = this.sourceText.replace(/\b__m\d+_([A-Za-z_]\w*)/g, "$1");
+    return new Error(formatDiagnostic("Type", this.sourceName, readableSource, loc.line, loc.column, readableMessage));
   }
   check(program: Stmt[]): void {
     this.scopes = [new Map()]; this.functions = new Map(); this.aliases = new Map(); this.currentReturn = null; this.genericScopes = [];
