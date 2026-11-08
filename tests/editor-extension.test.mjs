@@ -10,7 +10,9 @@ test('VS Code extension registers Wibufy .wbf language support', () => {
   const language = manifest.contributes.languages.find((item) => item.id === 'wibufy');
   assert.ok(language);
   assert.ok(language.extensions.includes('.wbf'));
-  assert.equal(manifest.version, '0.7.0-dev.4');
+  assert.equal(manifest.version, '0.7.0-dev.5');
+  assert.equal(manifest.main, './extension.cjs');
+  assert.ok(manifest.activationEvents.includes('onLanguage:wibufy'));
 });
 
 test('VS Code extension assets and editor configuration exist', () => {
@@ -29,4 +31,17 @@ test('Wibufy grammar highlights core language constructs and aliases', () => {
   for (const keyword of ['fn', 'koto', 'let', 'senpai', 'return', 'if', 'else', 'import', 'export']) {
     assert.ok(source.includes(keyword));
   }
+});
+
+test('LSP server uses the explicit Node.js package entrypoint', () => {
+  const source = readFileSync(new URL('../../src/lsp.ts', root), 'utf8');
+  assert.match(source, /from \"vscode-languageserver\/node\.js\"/);
+});
+
+test('VS Code extension starts the Wibufy language client', () => {
+  const extension = readFileSync(new URL('extension.cjs', root), 'utf8');
+  assert.ok(extension.includes('vscode-languageclient/node'));
+  assert.ok(extension.includes('dist/lsp.js'));
+  assert.ok(extension.includes('new LanguageClient'));
+  assert.ok(existsSync(new URL('.vscode/launch.json', root)));
 });

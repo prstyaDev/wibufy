@@ -1,4 +1,4 @@
-# Wibufy v0.7.0-dev.4
+# Wibufy v0.7.0-dev.5
 
 Modern. Expressive. General-purpose.
 
@@ -198,9 +198,9 @@ Use `--out <file.js>` (or `-o`) to choose a different output path. The compiler 
 The first compiler release targets Node.js. Browser, Deno, and Bun runtimes are future compatibility targets, not part of the current v0.6 guarantee. Source maps and full source-aware generated-code diagnostics are still under development.
 
 
-## Developer tools (v0.7 dev.2)
+## Developer tools (v0.7 dev.5)
 
-The VS Code extension in [`editor/vscode`](editor/vscode) registers `.wbf` files as Wibufy and provides syntax highlighting, a custom file icon, bracket/quote matching, indentation rules, and starter snippets.
+The VS Code extension in [`editor/vscode`](editor/vscode) registers `.wbf` files as Wibufy and provides syntax highlighting, a custom file icon, bracket/quote matching, indentation rules, starter snippets, and real-time diagnostics through the Wibufy Language Server.
 
 A first source formatter is available through the CLI:
 
@@ -209,4 +209,4 @@ npm run dev -- format examples/hello.wbf
 npm run dev -- format examples/hello.wbf --write
 ```
 
-Without `--write`, formatted source is printed to standard output. With `--write`, the file is updated only after the formatted result passes the Wibufy lexer and parser. The formatter preserves keyword aliases and string literal contents. This is an initial formatter; comment-only lines and advanced formatting preferences remain future refinements. The interactive REPL and richer diagnostics are still planned for v0.7.
+Without `--write`, formatted source is printed to standard output. With `--write`, the file is updated only after the formatted result passes the Wibufy lexer and parser. The formatter preserves keyword aliases and string literal contents. This is an initial formatter; comment-only lines and advanced formatting preferences remain future refinements. The interactive REPL, richer diagnostics, and initial Language Server Protocol integration are now available. The current language server validates open documents after edits and reports lexer, parser, and type errors. Type checking is skipped for files containing imports until workspace-aware module analysis is implemented.

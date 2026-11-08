@@ -56,7 +56,7 @@ Build an example with `npm run dev -- build examples/compiler.wbf`, then execute
 
 - Open `editor/vscode` as a folder in VS Code and launch an Extension Development Host with `F5`.
 - Open an `.wbf` file and verify Wibufy syntax highlighting, the custom file icon, comment toggling, bracket/quote matching, indentation, and snippets.
-- The extension is an early development build; formatter, REPL, language-server diagnostics, and debugging are not yet implemented.
+- The extension also starts the Wibufy language server and reports real-time lexer, parser, and type diagnostics. Type checking is skipped for documents containing imports until workspace-aware module analysis is implemented.
 
 ## Interactive REPL smoke test
 
@@ -74,3 +74,13 @@ Try `let answer = 40`, then `answer + 2`, then `.exit`. The expression should pr
 - Check a parser hint with `printf 'print(1 + )\n' > /tmp/bad.wbf` then `npm run dev -- run /tmp/bad.wbf`.
 - Check a type hint with `npm run dev -- run examples/type_error.wbf`.
 - Diagnostics should show adjacent source lines, a caret, and a Help suggestion when a reliable suggestion exists.
+
+
+## v0.7.0-dev.5 — Language Server Protocol
+
+- `npm run check` validates the language server and diagnostic adapter.
+- `npm test` includes LSP diagnostic conversion and extension activation metadata tests.
+- Open `editor/vscode` in VS Code, run `npm install` and `npm run build` from the repository root, then press F5.
+- Open a `.wbf` file and introduce a lexer, parser, or type error. Verify that a diagnostic appears without running the CLI.
+- Edit or remove the error and verify that the diagnostic updates or disappears.
+- Documents containing imports still receive lexer/parser diagnostics, but type checking is temporarily skipped.

@@ -1,6 +1,6 @@
 {
   "name": "wibufy",
-  "version": "0.7.0-dev.4",
+  "version": "0.7.0-dev.5",
   "private": true,
   "type": "module",
   "description": "Wibufy programming language with a tree-walk interpreter and JavaScript compiler",
@@ -9,11 +9,17 @@
     "build": "tsc",
     "start": "node dist/cli.js",
     "check": "tsc --noEmit",
-    "test": "npm run build && node --test"
+    "test": "npm run build && node --test",
+    "lsp": "node dist/lsp.js"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12"
   }
 }

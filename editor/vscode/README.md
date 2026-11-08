@@ -1,11 +1,21 @@
 # Wibufy Language Support for VS Code
 
-This development extension provides the `.wbf` language identifier, a custom Wibufy file icon, syntax highlighting, bracket/quote matching, indentation rules, and starter snippets.
+Development extension for Wibufy `.wbf` source files.
 
-## Try it locally
+Features:
+- Wibufy language identifier and custom file icon
+- Syntax highlighting
+- Bracket and quote matching
+- Automatic indentation
+- Starter snippets
+- Language Server Protocol integration
+- Real-time lexer, parser, and type diagnostics
 
-1. Open this `editor/vscode` folder in VS Code.
-2. Press `F5` to launch an Extension Development Host (requires the VS Code Extension Development workflow).
-3. Open any `.wbf` file and select **Wibufy** if prompted.
+## Run locally
 
-This is an early development extension. It does not yet include formatting, diagnostics integration, a language server, or debugging.
+1. Open the `editor/vscode` folder in VS Code.
+2. From the repository root, run `npm install` and `npm run build`.
+3. Press F5 to launch the Extension Development Host.
+4. Open a `.wbf` file and introduce a syntax or type error to test diagnostics.
+
+The language server currently skips type checking for documents containing imports. Lexer and parser diagnostics remain enabled for those documents. Multi-file workspace analysis, completion, hover, and code actions are not part of this development milestone.
