@@ -11,7 +11,7 @@ import { runRepl } from "./repl.js";
 
 function usage(): void {
   console.error([
-    "Wibufy v0.7.0-dev.4",
+    "Wibufy v0.7.0-dev.8",
     "Usage:",
     "  wibufy run <file.wbf>",
     "  wibufy build <file.wbf> [--out <file.js>]",
@@ -22,7 +22,17 @@ function usage(): void {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const mode = ["run", "build", "format", "repl"].includes(args[0] ?? "") ? args.shift()! : "run";
+  const commands = ["run", "build", "format", "repl"];
+  const first = args[0] ?? "";
+  if (first === "--help" || first === "-h") { usage(); return; }
+  if (commands.includes(first)) args.shift();
+  else if (first && !first.endsWith(".wbf")) {
+    console.error(`Unknown command '${first}'.`);
+    usage();
+    process.exitCode = 1;
+    return;
+  }
+  const mode = commands.includes(first) ? first : "run";
   if (mode === "repl") {
     if (args.length) { console.error("Usage: wibufy repl"); process.exitCode = 1; return; }
     await runRepl();
@@ -45,6 +55,12 @@ async function main(): Promise<void> {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;
     }
+    return;
+  }
+
+  if (mode === "run" && args.length > 0) {
+    console.error("Usage: wibufy run <file.wbf>");
+    process.exitCode = 1;
     return;
   }
 

@@ -10,10 +10,10 @@ const binary = new Set(["equal", "equalEqual", "bangEqual", "greater", "greaterE
 export function formatWibufy(source: string, options: FormatOptions = {}): string {
   const indentSize = Math.max(1, Math.min(8, Math.trunc(options.indentSize ?? 4)));
   const tokens = new Lexer(source).scan().filter(t => t.type !== "eof");
-  if (!tokens.length) return "";
 
-  // The lexer intentionally ignores line comments. Reattach them by their original line.
-  const comments = new Map<number, string[]>();
+  // The lexer intentionally ignores line comments. Reattach inline comments
+  // to their code line and preserve comment-only lines at their source position.
+  const allComments = new Map<number, string[]>();
   source.split(/\r?\n/).forEach((text, index) => {
     let quoted = false;
     let escaped = false;
@@ -25,11 +25,22 @@ export function formatWibufy(source: string, options: FormatOptions = {}): strin
         else if (char === '"') quoted = false;
       } else if (char === '"') quoted = true;
       else if (char === "/" && text[i + 1] === "/") {
-        comments.set(index + 1, [...(comments.get(index + 1) ?? []), text.slice(i).trimEnd()]);
+        allComments.set(index + 1, [...(allComments.get(index + 1) ?? []), text.slice(i).trimEnd()]);
         break;
       }
     }
   });
+
+  const codeLines = new Set(tokens.filter(token => token.type !== "newline").map(token => token.line));
+  const comments = new Map([...allComments].filter(([line]) => codeLines.has(line)));
+  const standaloneComments = [...allComments]
+    .filter(([line]) => !codeLines.has(line))
+    .sort(([left], [right]) => left - right);
+
+  if (!tokens.length) {
+    const lines = standaloneComments.flatMap(([, values]) => values);
+    return lines.length ? `${lines.join("\n")}\n` : "";
+  }
 
   let out = "";
   let indent = 0;
@@ -44,8 +55,21 @@ export function formatWibufy(source: string, options: FormatOptions = {}): strin
   const append = (value: string) => { if (!out || out.endsWith("\n")) out += pad(); out += value; };
   const space = () => { if (out && !/[\s]$/.test(out)) out += " "; };
 
+  let standaloneIndex = 0;
+  const flushStandaloneBefore = (lineNumber: number) => {
+    while (standaloneIndex < standaloneComments.length && standaloneComments[standaloneIndex]![0] < lineNumber) {
+      newline();
+      for (const comment of standaloneComments[standaloneIndex]![1]) {
+        append(comment);
+        newline();
+      }
+      standaloneIndex++;
+    }
+  };
+
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i]!;
+    flushStandaloneBefore(token.line);
     const next = tokens[i + 1];
     const gap = token.line > line;
     if (gap && parens === 0 && brackets === 0 && braces > 0 && previous && ["newline", "semicolon"].includes(previous.type)) newline();

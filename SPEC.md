@@ -1,7 +1,7 @@
 # Wibufy Language Specification
-## Draft 0.6
+## Draft 0.7
 
-**Status:** v0.6.0-dev.2 development draft
+**Status:** v0.7.0-dev.8 development draft
 **Language:** Wibufy
 **File extension:** `.wbf`
 **Implementation language:** TypeScript
@@ -591,14 +591,16 @@ Alias normalization belongs in the frontend. For example, `koto` and `fn` should
 - [ ] Broader interpreter/compiler semantic parity coverage.
 - [ ] Runtime hardening and additional CLI polish.
 
-### v0.7.0 — Developer Tools (in development)
-- [x] Initial VS Code language extension for `.wbf` files.
-- [x] Custom Wibufy file icon, syntax highlighting, bracket matching, indentation, and snippets.
-- [ ] REPL.
-- [ ] Formatter.
-- [ ] Linter.
-- [ ] Language Server Protocol and editor diagnostics.
-- [ ] Debugging support.
+### v0.7.0 — Developer Tools (development integration and hardening)
+- [x] VS Code extension: `.wbf` language registration, icon, syntax highlighting, editor configuration, and snippets.
+- [x] CLI source formatter with syntax validation before writing.
+- [x] Interactive REPL with persistent successful declarations and multiline input.
+- [x] Improved lexer, parser, type, and runtime diagnostics.
+- [x] Initial Language Server Protocol stdio server with live lexer/parser/type diagnostics.
+- [x] String method calls with static validation and interpreter/compiler parity.
+- [x] Typed array `push(value)` with updated length and interpreter/compiler parity.
+- [ ] Final integration, hardening, documentation, and regression verification.
+- Not included: full workspace-aware LSP imports, completion, hover, code actions, debugger, or standalone linter.
 
 ### v0.8.0 — Package Ecosystem
 - Package manager.
@@ -655,7 +657,7 @@ Implemented in v0.3:
 Known v0.3 boundaries:
 - `for ... in` accepts arrays only.
 - Empty arrays require an explicit `Array<T>` annotation.
-- Collection methods such as `push` and `pop` are not implemented.
+- The `push(value)` array method is added in v0.7; other collection methods such as `pop`, `map`, and `filter` are not implemented.
 - `break` and `continue` are not implemented.
 - Generic functions, user-defined type aliases, and generic aliases are introduced in v0.4.
 - The JavaScript compiler is introduced in v0.6; its first backend targets Node.js.
@@ -883,23 +885,24 @@ The first backend preserves Wibufy array bounds checks, loop safety limits, prin
 
 ## 19. v0.7 Developer Tools (Draft 0.7)
 
-The v0.7 milestone improves the programming experience without changing Wibufy's language semantics or compiler/interpreter architecture. Development increment dev.1 provides an initial VS Code extension in `editor/vscode`: `.wbf` language registration, a custom file icon, TextMate syntax highlighting, comment/bracket/quote configuration, indentation rules, and starter snippets.
+The v0.7 milestone improves the programming experience without changing Wibufy's core language architecture.
 
-Development increment dev.2 adds the first CLI formatter. `wibufy format <file.wbf>` prints formatted source; `wibufy format <file.wbf> --write` updates the source file after lexing and parsing the formatted result successfully. The formatter normalizes whitespace, operators, commas, blocks, and indentation while preserving original token spelling, aliases, and string contents. It is intentionally a first formatter: standalone comment lines and configurable formatting profiles are not yet supported.
+### Editor support and language server
 
-The editor extension remains separate from the TypeScript compiler and interpreter. An interactive REPL, richer integrated diagnostics, and debugging remain planned v0.7 work.
+The VS Code extension in `editor/vscode` registers `.wbf` files, provides a custom file icon, TextMate syntax highlighting, comment/bracket/quote configuration, indentation rules, and starter snippets. It starts the Wibufy stdio language server and displays lexer, parser, and type diagnostics for open documents. The server uses incremental document synchronization and clears diagnostics when a document closes.
+
+The initial language server does not yet resolve workspace imports. It therefore skips type checking for a document containing imports while retaining lexer and parser diagnostics. Completion, hover, code actions, rename, debugging, and a standalone linter are outside v0.7.
+
+### Formatter and REPL
+
+`wibufy format <file.wbf>` prints formatted source; `wibufy format <file.wbf> --write` updates the file only after the formatted result passes lexing and parsing. The formatter normalizes whitespace, operators, commas, blocks, and indentation while preserving aliases, strings, inline comments, and standalone line comments.
+
+`wibufy repl` provides interactive execution. Successful declarations persist between submissions, standalone expressions print their values, and multiline blocks are supported. Imports and exports are not available in the REPL.
+
+### Method calls and collection operations
+
+String values support `toUpperCase()`, `toLowerCase()`, `trim()`, `includes(text)`, `startsWith(text)`, `endsWith(text)`, `indexOf(text)`, and `replace(search, replacement)`. Calls may be chained and their receiver is evaluated exactly once.
+
+Mutable arrays support `push(value)`. It validates the value against the array's invariant element type, appends exactly one element, mutates the existing array, and returns the new numeric length. Array index assignment remains strictly bounds-checked; it does not append. Both features are supported by the tree-walk interpreter and JavaScript compiler.
 
 **End of Wibufy Specification Draft 0.7**
-
-
-## v0.7 Developer Tools — Better Diagnostics (dev.4)
-
-The CLI provides `wibufy repl` (or `npm run dev -- repl`) for interactive execution. Each completed submission is parsed and type-checked together with prior successful submissions, while only the new statements are executed. Runtime bindings therefore persist without re-running earlier side effects. Standalone expression statements display their resulting value. Multiline blocks are supported. `.help` displays commands and `.exit` ends the session. Imports and exports are currently unsupported in the REPL.
-
-
-### Better diagnostics (v0.7.0-dev.4)
-
-- Diagnostics show the source line before and after the failing line when available.
-- Caret positions are clamped to valid source coordinates, including end-of-file errors.
-- Common lexer, parser, type, and runtime mistakes receive concise, actionable help suggestions.
-- Suggestions are omitted when the diagnostic does not have a reliable fix recommendation.

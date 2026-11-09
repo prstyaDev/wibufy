@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 
 const root = new URL('../editor/vscode/', import.meta.url);
+const project = new URL('../', import.meta.url);
+const projectManifest = JSON.parse(readFileSync(new URL('package.json', project), 'utf8'));
 const readJson = (path) => JSON.parse(readFileSync(new URL(path, root), 'utf8'));
 
 test('VS Code extension registers Wibufy .wbf language support', () => {
@@ -10,7 +12,8 @@ test('VS Code extension registers Wibufy .wbf language support', () => {
   const language = manifest.contributes.languages.find((item) => item.id === 'wibufy');
   assert.ok(language);
   assert.ok(language.extensions.includes('.wbf'));
-  assert.equal(manifest.version, '0.7.0-dev.7');
+  assert.equal(manifest.version, projectManifest.version);
+  assert.equal(manifest.version, '0.7.0-dev.8');
   assert.equal(manifest.main, './extension.cjs');
   assert.ok(manifest.activationEvents.includes('onLanguage:wibufy'));
 });
@@ -44,4 +47,14 @@ test('VS Code extension starts the Wibufy language client', () => {
   assert.ok(extension.includes('dist/lsp.js'));
   assert.ok(extension.includes('new LanguageClient'));
   assert.ok(existsSync(new URL('.vscode/launch.json', root)));
+});
+
+
+test('CLI, REPL, and language server report the project version', () => {
+  const cli = readFileSync(new URL('../src/cli.ts', import.meta.url), 'utf8');
+  const repl = readFileSync(new URL('../src/repl.ts', import.meta.url), 'utf8');
+  const lsp = readFileSync(new URL('../src/lsp.ts', import.meta.url), 'utf8');
+  assert.ok(cli.includes(projectManifest.version));
+  assert.ok(repl.includes(projectManifest.version));
+  assert.ok(lsp.includes(projectManifest.version));
 });

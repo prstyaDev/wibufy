@@ -34,3 +34,13 @@ test("formatter retains line comments", () => {
   assert.match(formatted, /\/\/ the answer/);
   assert.doesNotThrow(() => parse(formatted));
 });
+
+
+test("formatter preserves standalone comments, including comment-only files", () => {
+  assert.equal(formatWibufy("// file header"), "// file header\n");
+  assert.equal(
+    formatWibufy("// file header\nlet value=1\n// explain value\nprint(value)"),
+    "// file header\nlet value = 1\n// explain value\nprint(value)\n",
+  );
+  assert.equal(formatWibufy(""), "");
+});

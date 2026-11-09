@@ -24,7 +24,7 @@ connection.onInitialize((_params: InitializeParams): InitializeResult => ({
   },
   serverInfo: {
     name: "Wibufy Language Server",
-    version: "0.7.0-dev.6",
+    version: "0.7.0-dev.8",
   },
 }));
 
