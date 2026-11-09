@@ -401,6 +401,17 @@ export class TypeChecker {
       case "call": {
         if (e.callee.kind === "property") {
           const receiver = this.expression(e.callee.object);
+          if (receiver.kind === "array") {
+            const methodName = e.callee.name;
+            if (methodName !== "push") throw new Error(`Type error: unknown array method '${methodName}'.`);
+            if (e.typeArguments) throw new Error(`Type error: method '${methodName}' does not accept type arguments.`);
+            if (e.args.length !== 1) throw new Error(`Type error: method 'push' expects 1 argument, got ${e.args.length}.`);
+            const actual = this.expression(e.args[0]!, receiver.element);
+            if (!accepts(receiver.element, actual)) {
+              throw new Error(`Type error: argument 1 of method 'push' expects ${formatType(receiver.element)}, got ${formatType(actual)}.`);
+            }
+            return primitive("number");
+          }
           if (!isPrimitive(receiver, "string")) {
             throw new Error(`Type error: method '${e.callee.name}' is not available on ${formatType(receiver)}.`);
           }

@@ -185,3 +185,20 @@ print(count)
 `;
   assert.equal(await execute(compileSource(source)), 'WIBUFY\n1\n');
 });
+
+test('compiler emits array push with compatible length and contents', async () => {
+  const source = `const values: Array<number> = [1, 2]
+print(values.push(3))
+print(values.length)
+print(values[2])`;
+  assert.equal(await execute(compileSource(source)), '3\n3\n3\n');
+});
+
+test('compiled array push evaluates its receiver exactly once', async () => {
+  const source = `let calls: number = 0
+const values: Array<number> = []
+fn getValues() -> Array<number> { calls = calls + 1; return values }
+getValues().push(7)
+print(calls)`;
+  assert.equal(await execute(compileSource(source)), '1\n');
+});

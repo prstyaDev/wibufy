@@ -43,6 +43,11 @@ export class JavaScriptCodeGenerator {
       "  if (target === null || typeof target !== 'object' || Array.isArray(target)) throw new Error(`Cannot assign property '${name}' on this value.`);",
       "  if (!(name in target)) throw new Error(`Object has no property '${name}'.`); target[name] = value; return value;",
       "}",
+      "function __wibufyArrayPush(target, args) {",
+      "  if (!Array.isArray(target)) throw new Error(\"Array method 'push' requires an array receiver.\");",
+      "  if (args.length !== 1) throw new Error(\"Invalid arguments for array method 'push'.\");",
+      "  target.push(args[0]); return target.length;",
+      "}",
       "function __wibufyCallStringMethod(target, name, args) {",
       "  if (typeof target !== 'string') throw new Error(`Method '${name}' requires a string receiver.`);",
       "  switch (name) {",
@@ -215,6 +220,9 @@ export class JavaScriptCodeGenerator {
       case "object": return `Object.assign(Object.create(null), Object.fromEntries([${expression.properties.map(property => `[${JSON.stringify(property.name)}, ${this.expression(property.value)}]`).join(", ")}]))`;
       case "call": {
         if (expression.callee.kind === "property") {
+          if (expression.callee.name === "push") {
+            return `__wibufyArrayPush(${this.expression(expression.callee.object)}, [${expression.args.map(argument => this.expression(argument)).join(", ")}])`;
+          }
           return `__wibufyCallStringMethod(${this.expression(expression.callee.object)}, ${JSON.stringify(expression.callee.name)}, [${expression.args.map(argument => this.expression(argument)).join(", ")}])`;
         }
         if (expression.callee.kind !== "variable") throw new Error("[Wibufy Compiler Error] Only named function calls and supported methods are allowed.");

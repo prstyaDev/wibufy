@@ -169,6 +169,12 @@ export class Interpreter {
         if (e.callee.kind === "property") {
           const receiver = this.evaluate(e.callee.object);
           const args = e.args.map(x => this.evaluate(x));
+          if (Array.isArray(receiver)) {
+            if (e.callee.name !== "push") throw new Error(`Unknown array method '${e.callee.name}'.`);
+            if (args.length !== 1) throw new Error("Invalid arguments for array method 'push'.");
+            receiver.push(args[0]!);
+            return receiver.length;
+          }
           if (typeof receiver !== "string") {
             throw new Error(`Method '${e.callee.name}' requires a string receiver.`);
           }

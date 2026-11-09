@@ -10,7 +10,7 @@ test('VS Code extension registers Wibufy .wbf language support', () => {
   const language = manifest.contributes.languages.find((item) => item.id === 'wibufy');
   assert.ok(language);
   assert.ok(language.extensions.includes('.wbf'));
-  assert.equal(manifest.version, '0.7.0-dev.6');
+  assert.equal(manifest.version, '0.7.0-dev.7');
   assert.equal(manifest.main, './extension.cjs');
   assert.ok(manifest.activationEvents.includes('onLanguage:wibufy'));
 });

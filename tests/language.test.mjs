@@ -744,3 +744,16 @@ print(next().toUpperCase())
 print(count)
 `), ["WIBUFY", "1"]);
 });
+
+test("array push appends one compatible element and updates length", () => {
+  assert.deepEqual(run(`const values: Array<number> = [1, 2]
+print(values.push(3))
+print(values.length)
+print(values[2])`), ["3", "3", "3"]);
+});
+
+test("array push rejects incompatible values and invalid calls", () => {
+  assert.throws(() => compile(`const values: Array<number> = [1]\nvalues.push("wrong")`), /expects number, got string/);
+  assert.throws(() => compile(`const values: Array<number> = []\nvalues.push()`), /expects 1 argument, got 0/);
+  assert.throws(() => compile(`const values: Array<number> = []\nvalues.pop()`), /unknown array method 'pop'/);
+});
