@@ -399,7 +399,38 @@ export class TypeChecker {
         return value;
       }
       case "call": {
-        if (e.callee.kind !== "variable") throw new Error("Type error: only named function calls are supported.");
+        if (e.callee.kind === "property") {
+          const receiver = this.expression(e.callee.object);
+          if (!isPrimitive(receiver, "string")) {
+            throw new Error(`Type error: method '${e.callee.name}' is not available on ${formatType(receiver)}.`);
+          }
+          const signatures: Record<string, { params: PrimitiveName[]; returns: PrimitiveName }> = {
+            toUpperCase: { params: [], returns: "string" },
+            toLowerCase: { params: [], returns: "string" },
+            trim: { params: [], returns: "string" },
+            includes: { params: ["string"], returns: "boolean" },
+            startsWith: { params: ["string"], returns: "boolean" },
+            endsWith: { params: ["string"], returns: "boolean" },
+            indexOf: { params: ["string"], returns: "number" },
+            replace: { params: ["string", "string"], returns: "string" },
+          };
+          const methodName = e.callee.name;
+          const signature = signatures[methodName];
+          if (!signature) throw new Error(`Type error: unknown string method '${methodName}'.`);
+          if (e.typeArguments) throw new Error(`Type error: method '${methodName}' does not accept type arguments.`);
+          if (e.args.length !== signature.params.length) {
+            throw new Error(`Type error: method '${methodName}' expects ${signature.params.length} arguments, got ${e.args.length}.`);
+          }
+          e.args.forEach((arg, index) => {
+            const actual = this.expression(arg);
+            const expected = primitive(signature.params[index]!);
+            if (!accepts(expected, actual)) {
+              throw new Error(`Type error: argument ${index + 1} of method '${methodName}' expects ${formatType(expected)}, got ${formatType(actual)}.`);
+            }
+          });
+          return primitive(signature.returns);
+        }
+        if (e.callee.kind !== "variable") throw new Error("Type error: only named function calls and supported methods are allowed.");
         const name = e.callee.name, fn = this.functions.get(name);
         if (!fn) throw new Error(`Type error: unknown function '${name}'.`);
         if (e.args.length !== fn.params.length) throw new Error(`Type error: '${name}' expects ${fn.params.length} arguments, got ${e.args.length}.`);

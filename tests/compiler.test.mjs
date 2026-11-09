@@ -160,3 +160,28 @@ print(count)
 `;
   assert.equal(await execute(compileSource(source)), 'true\n1\n');
 });
+
+
+test('compiler emits safe string method calls with interpreter-compatible results', async () => {
+  const source = `
+let text = "  Wibufy Language  "
+print(text.trim().toUpperCase())
+print(text.includes("Language"))
+print(text.indexOf("Language"))
+print(text.replace("Language", "Compiler"))
+`;
+  assert.equal(await execute(compileSource(source)), 'WIBUFY LANGUAGE\ntrue\n9\n  Wibufy Compiler  \n');
+});
+
+test('compiled string method receivers are evaluated exactly once', async () => {
+  const source = `
+let count = 0
+fn next() -> string {
+  count = count + 1
+  return "wibufy"
+}
+print(next().toUpperCase())
+print(count)
+`;
+  assert.equal(await execute(compileSource(source)), 'WIBUFY\n1\n');
+});

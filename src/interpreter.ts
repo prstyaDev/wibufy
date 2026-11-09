@@ -166,7 +166,26 @@ export class Interpreter {
       case "property": { const target = this.evaluate(e.object); if (Array.isArray(target) && e.name === "length") return target.length; if (target === null || typeof target !== "object" || Array.isArray(target) || (target instanceof WFunction || target instanceof WNativeFunction)) throw new Error(`Cannot read property '${e.name}' from this value.`); if (!(e.name in target)) throw new Error(`Object has no property '${e.name}'.`); return target[e.name]!; }
       case "propertyAssign": { const target = this.evaluate(e.object), value = this.evaluate(e.value); if (target === null || typeof target !== "object" || Array.isArray(target) || (target instanceof WFunction || target instanceof WNativeFunction)) throw new Error(`Cannot assign property '${e.name}' on this value.`); if (!(e.name in target)) throw new Error(`Object has no property '${e.name}'.`); target[e.name] = value; return value; }
       case "call": {
-        if (e.callee.kind !== "variable") throw new Error("Only named function calls are supported.");
+        if (e.callee.kind === "property") {
+          const receiver = this.evaluate(e.callee.object);
+          const args = e.args.map(x => this.evaluate(x));
+          if (typeof receiver !== "string") {
+            throw new Error(`Method '${e.callee.name}' requires a string receiver.`);
+          }
+          switch (e.callee.name) {
+            case "toUpperCase": if (args.length === 0) return receiver.toUpperCase(); break;
+            case "toLowerCase": if (args.length === 0) return receiver.toLowerCase(); break;
+            case "trim": if (args.length === 0) return receiver.trim(); break;
+            case "includes": if (args.length === 1 && typeof args[0] === "string") return receiver.includes(args[0]); break;
+            case "startsWith": if (args.length === 1 && typeof args[0] === "string") return receiver.startsWith(args[0]); break;
+            case "endsWith": if (args.length === 1 && typeof args[0] === "string") return receiver.endsWith(args[0]); break;
+            case "indexOf": if (args.length === 1 && typeof args[0] === "string") return receiver.indexOf(args[0]); break;
+            case "replace": if (args.length === 2 && typeof args[0] === "string" && typeof args[1] === "string") return receiver.replace(args[0], args[1]); break;
+            default: throw new Error(`Unknown string method '${e.callee.name}'.`);
+          }
+          throw new Error(`Invalid arguments for string method '${e.callee.name}'.`);
+        }
+        if (e.callee.kind !== "variable") throw new Error("Only named function calls and supported methods are allowed.");
         const value = this.environment.get(e.callee.name);
         const args = e.args.map(x => this.evaluate(x));
         if (value instanceof WNativeFunction) return this.invokeNative(value.name, args);

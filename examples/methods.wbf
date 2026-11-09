@@ -1,0 +1,9 @@
+let text = "  Wibufy Language  "
+
+print(text.trim().toUpperCase())
+print(text.toLowerCase())
+print(text.includes("Language"))
+print(text.startsWith("  Wi"))
+print(text.endsWith("  "))
+print(text.indexOf("Language"))
+print(text.replace("Language", "Compiler"))

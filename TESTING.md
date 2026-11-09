@@ -84,3 +84,5 @@ Try `let answer = 40`, then `answer + 2`, then `.exit`. The expression should pr
 - Open a `.wbf` file and introduce a lexer, parser, or type error. Verify that a diagnostic appears without running the CLI.
 - Edit or remove the error and verify that the diagnostic updates or disappears.
 - Documents containing imports still receive lexer/parser diagnostics, but type checking is temporarily skipped.
+
+\n## v0.7.0-dev.6 — Method calls\n\n- `npm run check` validates method-call typing across the interpreter and compiler.\n- `npm test` includes string method, chaining, invalid receiver/argument, and single-evaluation regression tests.\n- Run `npm run dev -- run examples/methods.wbf` after building or use the inline examples in `tests/language.test.mjs`.\n- Verify interpreter and compiled output agree for all supported string methods.\n- Array append and collection methods remain out of scope until dev.7.\n

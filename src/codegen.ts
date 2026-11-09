@@ -43,6 +43,21 @@ export class JavaScriptCodeGenerator {
       "  if (target === null || typeof target !== 'object' || Array.isArray(target)) throw new Error(`Cannot assign property '${name}' on this value.`);",
       "  if (!(name in target)) throw new Error(`Object has no property '${name}'.`); target[name] = value; return value;",
       "}",
+      "function __wibufyCallStringMethod(target, name, args) {",
+      "  if (typeof target !== 'string') throw new Error(`Method '${name}' requires a string receiver.`);",
+      "  switch (name) {",
+      "    case 'toUpperCase': if (args.length === 0) return target.toUpperCase(); break;",
+      "    case 'toLowerCase': if (args.length === 0) return target.toLowerCase(); break;",
+      "    case 'trim': if (args.length === 0) return target.trim(); break;",
+      "    case 'includes': if (args.length === 1 && typeof args[0] === 'string') return target.includes(args[0]); break;",
+      "    case 'startsWith': if (args.length === 1 && typeof args[0] === 'string') return target.startsWith(args[0]); break;",
+      "    case 'endsWith': if (args.length === 1 && typeof args[0] === 'string') return target.endsWith(args[0]); break;",
+      "    case 'indexOf': if (args.length === 1 && typeof args[0] === 'string') return target.indexOf(args[0]); break;",
+      "    case 'replace': if (args.length === 2 && typeof args[0] === 'string' && typeof args[1] === 'string') return target.replace(args[0], args[1]); break;",
+      "    default: throw new Error(`Unknown string method '${name}'.`);",
+      "  }",
+      "  throw new Error(`Invalid arguments for string method '${name}'.`);",
+      "}",
       "function __wibufyGetIndex(target, index) {",
       "  if (!Array.isArray(target)) throw new Error('Index access requires an array.');",
       "  if (!Number.isInteger(index) || index < 0 || index >= target.length) throw new Error(`Array index ${String(index)} is out of bounds.`);",
@@ -199,7 +214,10 @@ export class JavaScriptCodeGenerator {
       case "array": return `[${expression.elements.map(element => this.expression(element)).join(", ")}]`;
       case "object": return `Object.assign(Object.create(null), Object.fromEntries([${expression.properties.map(property => `[${JSON.stringify(property.name)}, ${this.expression(property.value)}]`).join(", ")}]))`;
       case "call": {
-        if (expression.callee.kind !== "variable") throw new Error("[Wibufy Compiler Error] Only named function calls are supported.");
+        if (expression.callee.kind === "property") {
+          return `__wibufyCallStringMethod(${this.expression(expression.callee.object)}, ${JSON.stringify(expression.callee.name)}, [${expression.args.map(argument => this.expression(argument)).join(", ")}])`;
+        }
+        if (expression.callee.kind !== "variable") throw new Error("[Wibufy Compiler Error] Only named function calls and supported methods are allowed.");
         return `${this.expression(expression.callee)}(${expression.args.map(argument => this.expression(argument)).join(", ")})`;
       }
     }
