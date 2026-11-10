@@ -22,7 +22,7 @@ export class Interpreter {
   private aliases = new Map<string, Extract<Stmt, { kind: "typeAlias" }>>();
   constructor(private readonly output: (value: string) => void = console.log, private readonly sourceName = "<source>", private readonly sourceText = "") {}
   interpret(statements: Stmt[]): void {
-    this.aliases = new Map(statements.filter((s): s is Extract<Stmt, { kind: "typeAlias" }> => s.kind === "typeAlias").map(s => [s.name, s]));
+    for (const alias of statements) if (alias.kind === "typeAlias") this.aliases.set(alias.name, alias);
     for (const s of statements) if (s.kind === "function") this.environment.define(s.name, s.native ? new WNativeFunction(s.native) : new WFunction(s, this.environment), false);
     for (const s of statements) this.execute(s);
   }
@@ -166,7 +166,47 @@ export class Interpreter {
       case "property": { const target = this.evaluate(e.object); if (Array.isArray(target) && e.name === "length") return target.length; if (target === null || typeof target !== "object" || Array.isArray(target) || (target instanceof WFunction || target instanceof WNativeFunction)) throw new Error(`Cannot read property '${e.name}' from this value.`); if (!(e.name in target)) throw new Error(`Object has no property '${e.name}'.`); return target[e.name]!; }
       case "propertyAssign": { const target = this.evaluate(e.object), value = this.evaluate(e.value); if (target === null || typeof target !== "object" || Array.isArray(target) || (target instanceof WFunction || target instanceof WNativeFunction)) throw new Error(`Cannot assign property '${e.name}' on this value.`); if (!(e.name in target)) throw new Error(`Object has no property '${e.name}'.`); target[e.name] = value; return value; }
       case "call": {
-        if (e.callee.kind !== "variable") throw new Error("Only named function calls are supported.");
+        if (e.callee.kind === "property") {
+          const receiver = this.evaluate(e.callee.object);
+          const args = e.args.map(x => this.evaluate(x));
+          if (Array.isArray(receiver)) {
+            if (e.callee.name !== "push") throw new Error(`Unknown array method '${e.callee.name}'.`);
+            if (args.length !== 1) throw new Error("Invalid arguments for array method 'push'.");
+            receiver.push(args[0]!);
+            return receiver.length;
+          }
+          if (typeof receiver !== "string") {
+            if (receiver !== null && typeof receiver === "object" && !Array.isArray(receiver)
+              && !(receiver instanceof WFunction) && !(receiver instanceof WNativeFunction)
+              && Object.prototype.hasOwnProperty.call(receiver, e.callee.name)) {
+              const callable = receiver[e.callee.name]!;
+              if (callable instanceof WNativeFunction) return this.invokeNative(callable.name, args);
+              if (!(callable instanceof WFunction)) throw new Error(`Property '${e.callee.name}' is not callable.`);
+              const declaration = callable.declaration;
+              if (args.length !== declaration.params.length) throw new Error(`Function property '${e.callee.name}' expects ${declaration.params.length} arguments, got ${args.length}.`);
+              const previous = this.environment; this.environment = new Environment(callable.closure);
+              declaration.params.forEach((p, i) => this.environment.define(p.name, args[i]!, false));
+              try { for (const child of declaration.body) this.execute(child); }
+              catch (error) { if (error instanceof ReturnSignal) return error.value; throw error; }
+              finally { this.environment = previous; }
+              return null;
+            }
+            throw new Error(`Method '${e.callee.name}' requires a string or object receiver.`);
+          }
+          switch (e.callee.name) {
+            case "toUpperCase": if (args.length === 0) return receiver.toUpperCase(); break;
+            case "toLowerCase": if (args.length === 0) return receiver.toLowerCase(); break;
+            case "trim": if (args.length === 0) return receiver.trim(); break;
+            case "includes": if (args.length === 1 && typeof args[0] === "string") return receiver.includes(args[0]); break;
+            case "startsWith": if (args.length === 1 && typeof args[0] === "string") return receiver.startsWith(args[0]); break;
+            case "endsWith": if (args.length === 1 && typeof args[0] === "string") return receiver.endsWith(args[0]); break;
+            case "indexOf": if (args.length === 1 && typeof args[0] === "string") return receiver.indexOf(args[0]); break;
+            case "replace": if (args.length === 2 && typeof args[0] === "string" && typeof args[1] === "string") return receiver.replace(args[0], args[1]); break;
+            default: throw new Error(`Unknown string method '${e.callee.name}'.`);
+          }
+          throw new Error(`Invalid arguments for string method '${e.callee.name}'.`);
+        }
+        if (e.callee.kind !== "variable") throw new Error("Only named function calls and supported methods are allowed.");
         const value = this.environment.get(e.callee.name);
         const args = e.args.map(x => this.evaluate(x));
         if (value instanceof WNativeFunction) return this.invokeNative(value.name, args);

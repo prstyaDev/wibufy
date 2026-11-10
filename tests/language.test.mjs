@@ -703,3 +703,84 @@ print(isPresent(maybe))
 test("string literals decode escaped quotes, slashes, and control characters", () => {
   assert.deepEqual(run(`print("quote: \\\"Wibufy\\\"")\nprint("line1\\nline2")\nprint("slash: \\\\")`), ["quote: \"Wibufy\"", "line1\nline2", "slash: \\"]);
 });
+
+
+test("string method calls support transformation and search operations", () => {
+  assert.deepEqual(run(`
+let text = "  Wibufy Language  "
+print(text.trim().toUpperCase())
+print(text.toLowerCase())
+print(text.includes("Language"))
+print(text.startsWith("  Wi"))
+print(text.endsWith("  "))
+print(text.indexOf("Language"))
+print(text.replace("Language", "Compiler"))
+`), [
+    "WIBUFY LANGUAGE",
+    "  wibufy language  ",
+    "true",
+    "true",
+    "true",
+    "9",
+    "  Wibufy Compiler  ",
+  ]);
+});
+
+test("string methods validate receiver, method name, arity, and argument types", () => {
+  assert.throws(() => compile(`let value = 42\nvalue.toUpperCase()`), /method 'toUpperCase' is not available on number/);
+  assert.throws(() => compile(`let value = "hi"\nvalue.missing()`), /unknown string method 'missing'/);
+  assert.throws(() => compile(`let value = "hi"\nvalue.includes()`), /expects 1 arguments, got 0/);
+  assert.throws(() => compile(`let value = "hi"\nvalue.includes(1)`), /expects string, got number/);
+});
+
+test("string method receivers are evaluated exactly once", () => {
+  assert.deepEqual(run(`
+let count = 0
+fn next() -> string {
+  count = count + 1
+  return "wibufy"
+}
+print(next().toUpperCase())
+print(count)
+`), ["WIBUFY", "1"]);
+});
+
+test("array push appends one compatible element and updates length", () => {
+  assert.deepEqual(run(`const values: Array<number> = [1, 2]
+print(values.push(3))
+print(values.length)
+print(values[2])`), ["3", "3", "3"]);
+});
+
+test("array push rejects incompatible values and invalid calls", () => {
+  assert.throws(() => compile(`const values: Array<number> = [1]\nvalues.push("wrong")`), /expects number, got string/);
+  assert.throws(() => compile(`const values: Array<number> = []\nvalues.push()`), /expects 1 argument, got 0/);
+  assert.throws(() => compile(`const values: Array<number> = []\nvalues.pop()`), /unknown array method 'pop'/);
+});
+
+
+test("object properties can call stored functions with static argument and return types", () => {
+  const source = `fn greet(name: string) -> string { return "Hello, " + name }
+let app = { greet: greet }
+print(app.greet("Wibufy"))
+print(app.greet("World").toUpperCase())`;
+  assert.deepEqual(run(source), ["Hello, Wibufy", "HELLO, WORLD"]);
+});
+
+test("object function calls reject invalid arity, argument types, and non-callable properties", () => {
+  assert.throws(() => compile(`fn greet(name: string) -> string { return name }
+let app = { greet: greet }
+app.greet()`), /expects 1 arguments, got 0/);
+  assert.throws(() => compile(`fn greet(name: string) -> string { return name }
+let app = { greet: greet }
+app.greet(42)`), /expects string, got number/);
+  assert.throws(() => compile(`let app = { value: 42 }
+app.value()`), /not callable/);
+});
+
+
+test("object function properties can use names reserved by built-in methods", () => {
+  assert.deepEqual(run(`fn append(value: string) -> string { return value + "!" }
+let actions = { push: append }
+print(actions.push("Wibufy"))`), ["Wibufy!"]);
+});

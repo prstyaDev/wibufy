@@ -1,52 +1,69 @@
-# Testing Wibufy v0.6.0-dev.2
+# Wibufy v0.7.0-dev.9 — Testing Guide
 
-This development snapshot contains the v0.6 JavaScript compiler on top of the v0.5 module system and standard library. It does not modify or replace an existing Git repository.
+## Requirements and setup
 
-## Termux
-
-After downloading and extracting the ZIP:
+- Node.js 20 or newer
+- npm
 
 ```bash
-cd ~/wibufy
 npm install
 npm run check
 npm test
-npm run dev -- run examples/modules/main.wbf
-npm run dev -- run examples/standard_library.wbf
+git diff --check
 ```
 
-The test suite preserves the v0.2-v0.4 regression coverage and adds module, import/export, circular-dependency, standard-library, and escaped-string tests.
+`npm test` builds TypeScript first, then runs the full Node.js regression suite.
 
-## Module behavior to test
+## CLI smoke tests
 
-- Named imports, renamed imports, and namespace imports.
-- Exported functions, variables/constants, and type aliases.
-- Private declarations cannot be imported.
-- Relative module resolution and `.wbf` extension checks.
-- Modules initialize once and dependencies initialize before the entry module.
-- Circular dependencies are rejected.
-- Imported bindings are read-only.
-- All modules are type-checked before execution.
+```bash
+npm run dev -- run examples/hello.wbf
+npm run dev -- run examples/developer_tools.wbf
+npm run dev -- build examples/developer_tools.wbf --out /tmp/developer-tools.mjs
+node /tmp/developer-tools.mjs
+npm run dev -- format examples/hello.wbf
+npm run dev -- format examples/hello.wbf --write
+npm run dev -- repl
+```
 
-## Standard library
+The integrated developer-tools example exercises array append, string method chaining, array length, and iteration. Interpreter and compiler output should match exactly.
 
-- `wibufy/fs`: `readText`, `writeText`, `exists`, `listDir`.
-- `wibufy/json`: `parse`, `stringify`.
-- `wibufy/string`: `trim`, `split`, `join`, `replace`.
-- `wibufy/math`: `abs`, `sqrt`, `floor`, `ceil`, `round`, `pow`.
-- `wibufy/datetime`: `now`, `parse`, `toISOString`.
-- `wibufy/io`: `readLine`, `write`, `writeLine`.
+## Interactive REPL
 
-## Notes
+```bash
+npm run dev -- repl
+```
 
-- Node.js 20+ and npm are required.
-- `npm install` is required before running the project scripts.
-- The tree-walk interpreter remains available alongside the JavaScript compiler.
-- JSON values use a safe, non-recursive `JsonValue` alias in this milestone.
+Try `let answer = 40`, then `answer + 2`, then `.help` and `.exit`. The expression should print `42`. Successful declarations persist between submissions. Multiline blocks are supported; imports and exports are not available in the REPL.
 
+## Formatter
 
-## v0.6 JavaScript compiler
+- Verify operator spacing, indentation, aliases, and string contents.
+- Verify inline and standalone comments remain present.
+- Verify a comment-only file remains unchanged except for a normalized final newline.
+- Verify invalid formatted source is not written when using `--write`.
+- Formatting an already formatted file should be stable.
 
-Run the compiler regression suite with `npm test`. Compiler tests cover JavaScript generation and execution for functions, expressions, arrays, objects, loops, array bounds, primitive type guards (including single evaluation of their input), JavaScript-reserved/source-helper identifier isolation, standard-library native functions, and dependency-flattened local modules.
+## Language server and VS Code extension
 
-Build an example with `npm run dev -- build examples/compiler.wbf`, then execute the generated file with `node dist/build/compiler.js`. Use `--out <file.js>` to select another destination. The module example can also be compiled with `npm run dev -- build examples/modules/main.wbf`.
+1. From the repository root, run `npm install` and `npm run build`.
+2. Open `editor/vscode` in VS Code and press F5.
+3. Open a `.wbf` file and introduce lexer, parser, and type errors.
+4. Verify diagnostics update as the document changes and clear when the document closes.
+
+The current language server skips type checking for documents containing imports because workspace-aware module analysis is not yet implemented. Completion, hover, code actions, rename, and debugging are not part of this milestone.
+
+## Method and collection semantics
+- Object function properties can be called with `object.method(arguments)`; callability, arity, argument types, and return types are checked.
+- Interpreter and compiler both invoke object-stored functions with matching output.
+
+- String methods: `toUpperCase`, `toLowerCase`, `trim`, `includes`, `startsWith`, `endsWith`, `indexOf`, and `replace`.
+- Chained string method calls work and evaluate each receiver once.
+- Array `push(value)` appends one element, validates its element type, mutates the original array, and returns its new length.
+- Array `length` reflects the appended elements.
+- Invalid element types and invalid method calls produce type diagnostics.
+- Indexed reads and writes remain bounds-checked; out-of-range writes do not append.
+
+## Regression coverage
+
+The test suite covers earlier language, type-system, module, standard-library, interpreter, compiler, diagnostics, formatter, REPL, editor-extension, and LSP diagnostic behavior. v0.7 integration tests also compare the output of the combined developer-tools example between interpreter and compiled JavaScript.

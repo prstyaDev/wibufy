@@ -1,0 +1,13 @@
+// A compact smoke test for v0.7 developer-tool language features.
+let tasks: Array<string> = []
+let title = "  Wibufy Tools  "
+
+tasks.push(title.trim())
+tasks.push("Language Server")
+print(tasks.push("Array Append"))
+print(tasks.length)
+print(tasks[0].toUpperCase())
+
+for task in tasks {
+    print(task)
+}

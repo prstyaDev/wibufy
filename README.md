@@ -1,8 +1,8 @@
-# Wibufy v0.6.0-dev.2
+# Wibufy v0.7.0-dev.9
 
 Modern. Expressive. General-purpose.
 
-Wibufy is an experimental, statically typed general-purpose programming language implemented in TypeScript. Version 0.6 introduces the first JavaScript compiler backend while preserving the tree-walk interpreter, module system, advanced type system, and standard library.
+Wibufy is an experimental, statically typed general-purpose programming language implemented in TypeScript. Version 0.7 development begins the developer-tools milestone, building on the JavaScript compiler, tree-walk interpreter, module system, advanced type system, and standard library.
 
 ## Requirements
 
@@ -35,7 +35,17 @@ Or after building:
 node dist/cli.js run examples/hello.wbf
 ```
 
-## Language features through v0.5
+## Interactive REPL
+
+Start an interactive Wibufy session:
+
+```bash
+npm run dev -- repl
+```
+
+Enter expressions, declarations, and functions directly. Declarations remain available between submissions, and standalone expressions print their result. Multiline blocks are supported. Use `.help` for commands and `.exit` to leave the session. Module imports and exports are not available inside the REPL yet.
+
+## Language features through v0.7
 
 - Lexer, parser, AST, static type checker, and tree-walk interpreter
 - `let` and `const` with mutability checks
@@ -49,9 +59,10 @@ node dist/cli.js run examples/hello.wbf
 - Type aliases and generic type aliases
 - Structural and dependent generic constraints using `extends`
 - Contextual array typing for function parameters and explicitly typed union arrays
-- Arrays, `Array<T>`, indexing, mutation, and `.length`
+- Arrays, `Array<T>`, indexing, mutation, `.length`, and typed `push(value)`
 - Structural objects, property access, and property mutation
 - `for ... in` iteration over arrays
+- String method calls and chaining: `trim`, `toUpperCase`, `includes`, and related operations
 - Optional semicolons with newline-based statement termination
 - Wibufy aliases: `koto`, `senpai`, `sugoi`, and `muri`
 - Named imports and namespace imports from relative `.wbf` modules
@@ -60,7 +71,7 @@ node dist/cli.js run examples/hello.wbf
 - Read-only imported bindings with live access to exported mutable values
 - Standard library modules: `wibufy/fs`, `wibufy/json`, `wibufy/string`, `wibufy/math`, `wibufy/datetime`, and `wibufy/io`
 - Escaped string literals (`\"`, `\\`, `\n`, `\r`, `\t`, `\0`, and `\uXXXX`)
-- Automated regression tests preserving v0.2-v0.4 behavior
+- Automated regression tests preserving earlier language behavior and interpreter/compiler parity
 
 
 ## Modules
@@ -168,7 +179,7 @@ Wibufy reports lexer, parser, type, and runtime errors. Diagnostics include sour
 - Recursive type aliases, classes, inheritance, interfaces, conditional/mapped types, and variadic generics are not supported.
 - `for ... in` iterates arrays only.
 - Empty arrays require an explicit `Array<T>` annotation.
-- Array methods such as `push` and `pop`, `break`, and `continue` are not implemented.
+- Array `push(value)` is supported and returns the new array length. Other collection methods such as `pop`, `map`, and `filter` are not implemented.
 - The initial JavaScript compiler targets Node.js. Source maps, browser/Deno/Bun targets, advanced optimization, and full JavaScript interoperability remain future work.
 - Type syntax and semantic types both use recursive structured representations. Canonical type keys are used only for identity and union deduplication; assignability, inference, substitution, and narrowing operate on structured nodes.
 
@@ -186,3 +197,62 @@ node dist/build/compiler.js
 Use `--out <file.js>` (or `-o`) to choose a different output path. The compiler reuses the existing lexer, parser, module loader, and type checker; it emits JavaScript from the resolved AST. The tree-walk interpreter remains available with `wibufy run <file.wbf>`.
 
 The first compiler release targets Node.js. Browser, Deno, and Bun runtimes are future compatibility targets, not part of the current v0.6 guarantee. Source maps and full source-aware generated-code diagnostics are still under development.
+
+
+## Developer tools (v0.7 dev.8)
+
+The VS Code extension in [`editor/vscode`](editor/vscode) registers `.wbf` files as Wibufy and provides syntax highlighting, a custom file icon, bracket/quote matching, indentation rules, starter snippets, and real-time diagnostics through the Wibufy Language Server.
+
+A first source formatter is available through the CLI:
+
+```bash
+npm run dev -- format examples/hello.wbf
+npm run dev -- format examples/hello.wbf --write
+```
+
+Without `--write`, formatted source is printed to standard output. With `--write`, the file is updated only after the formatted result passes the Wibufy lexer and parser. The formatter preserves keyword aliases and string literal contents. This is an initial formatter; advanced formatting preferences remain future refinements. The interactive REPL, richer diagnostics, and initial Language Server Protocol integration are now available. The current language server validates open documents after edits and reports lexer, parser, and type errors. Type checking is skipped for files containing imports until workspace-aware module analysis is implemented.
+
+### Method calls
+
+Wibufy supports function calls through object properties (`app.greet("Wibufy")`) as well as built-in string and array methods. Object function properties are checked for callability, argument count, and argument types. String method calls can also be chained:
+
+```wbf
+let text = "  Wibufy Language  "
+print(text.trim().toUpperCase())
+print(text.includes("Language"))
+print(text.replace("Language", "Compiler"))
+```
+
+Available string methods are `toUpperCase()`, `toLowerCase()`, `trim()`, `includes(text)`, `startsWith(text)`, `endsWith(text)`, `indexOf(text)`, and `replace(search, replacement)`. Method calls are type-checked and work in both the interpreter and JavaScript compiler. Array `push(value)` is supported for mutable arrays, validates the element type, mutates the existing array, and returns its new length. The interpreter and JavaScript compiler share these semantics, including calls to functions stored in object properties.
+
+
+### Array append
+
+```wbf
+let tasks: Array<string> = []
+tasks.push("Learn Wibufy")
+tasks.push("Build a program")
+
+print(tasks.length)
+print(tasks[0])
+```
+
+`push(value)` appends exactly one element and returns the updated array length. The value must be compatible with the array's invariant element type. Indexed assignment remains bounds-checked; assigning to an out-of-range index does not append.
+
+## v0.7 development status
+
+The v0.7 developer-tools milestone includes:
+- VS Code language registration, icon, syntax highlighting, editor configuration, and snippets.
+- CLI formatter, interactive REPL, and improved source diagnostics.
+- Initial stdio Language Server Protocol diagnostics for open `.wbf` documents.
+- String methods and array `push(value)` in both interpreter and JavaScript compiler.
+
+The language server currently skips type checking for documents containing imports because workspace-aware module resolution is not implemented. Completion, hover, code actions, debugging, and a dedicated linter are not included in this milestone.
+
+Run the combined interpreter/compiler smoke example with:
+
+```bash
+npm run dev -- run examples/developer_tools.wbf
+npm run dev -- build examples/developer_tools.wbf -o /tmp/developer-tools.mjs
+node /tmp/developer-tools.mjs
+```

@@ -1,0 +1,27 @@
+{
+  "Function": {
+    "prefix": "fn",
+    "body": ["fn ${1:name}(${2:arg}: ${3:number}) -> ${4:void} {", "\t$0", "}"],
+    "description": "Declare a Wibufy function"
+  },
+  "Print": {
+    "prefix": "print",
+    "body": ["print(${1:message})"],
+    "description": "Print a value"
+  },
+  "If statement": {
+    "prefix": "if",
+    "body": ["if ${1:condition} {", "\t$0", "}"],
+    "description": "Create an if statement"
+  },
+  "For-in loop": {
+    "prefix": "forin",
+    "body": ["for ${1:item} in ${2:items} {", "\t$0", "}"],
+    "description": "Iterate over an array"
+  },
+  "Import names": {
+    "prefix": "import",
+    "body": ["import { ${1:name} } from \"${2:./module.wbf}\""],
+    "description": "Import named exports"
+  }
+}

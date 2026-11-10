@@ -5,6 +5,7 @@ type PrimitiveName = "number" | "string" | "boolean" | "void" | "null" | "never"
 type ValueType =
   | { kind: "primitive"; name: PrimitiveName }
   | { kind: "parameter"; name: string }
+  | { kind: "function"; params: ValueType[]; returns: ValueType }
   | { kind: "array"; element: ValueType }
   | { kind: "object"; properties: Map<string, ValueType> }
   | { kind: "union"; members: ValueType[] };
@@ -22,6 +23,7 @@ function typeKey(type: ValueType): string {
   switch (type.kind) {
     case "primitive": return type.name;
     case "parameter": return `'$${type.name}'`;
+    case "function": return `(${type.params.map(typeKey).join(",")})=>${typeKey(type.returns)}`;
     case "array": return `Array<${typeKey(type.element)}>`;
     case "object": return `Object{${[...type.properties].sort(([a], [b]) => a.localeCompare(b)).map(([name, value]) => `${name}:${typeKey(value)}`).join(",")}}`;
     case "union": return type.members.map(typeKey).join("|");
@@ -31,6 +33,7 @@ function formatType(type: ValueType): string {
   switch (type.kind) {
     case "primitive": return type.name;
     case "parameter": return type.name;
+    case "function": return `Function(${type.params.map(formatType).join(", ")}) => ${formatType(type.returns)}`;
     case "array": return `Array<${formatType(type.element)}>`;
     case "object": return `Object{${[...type.properties].map(([name, value]) => `${name}:${formatType(value)}`).join(",")}}`;
     case "union": return type.members.map(formatType).join("|");
@@ -55,6 +58,7 @@ function accepts(expected: ValueType, actual: ValueType): boolean {
   if (sameKey(expected, actual) || isPrimitive(actual, "never")) return true;
   if (expected.kind === "union") return members(actual).every(a => expected.members.some(e => accepts(e, a)));
   if (actual.kind === "union") return actual.members.every(a => accepts(expected, a));
+  if (expected.kind === "function" && actual.kind === "function") return expected.params.length === actual.params.length && expected.params.every((p, i) => sameType(p, actual.params[i]!)) && sameType(expected.returns, actual.returns);
   if (expected.kind === "array" && actual.kind === "array") return sameType(expected.element, actual.element);
   if (expected.kind === "object" && actual.kind === "object") {
     for (const [name, expectedType] of expected.properties) {
@@ -72,6 +76,7 @@ function withoutNull(type: ValueType): ValueType {
 }
 function substitute(type: ValueType, substitutions: Map<string, ValueType>): ValueType {
   if (type.kind === "parameter") return substitutions.get(type.name) ?? type;
+  if (type.kind === "function") return { kind: "function", params: type.params.map(p => substitute(p, substitutions)), returns: substitute(type.returns, substitutions) };
   if (type.kind === "array") return { kind: "array", element: substitute(type.element, substitutions) };
   if (type.kind === "object") return { kind: "object", properties: new Map([...type.properties].map(([name, value]) => [name, substitute(value, substitutions)])) };
   if (type.kind === "union") return unionType(type.members.map(member => substitute(member, substitutions)));
@@ -111,6 +116,11 @@ function infer(template: ValueType, actual: ValueType, names: Set<string>, found
     for (const [name, value] of merged) found.set(name, value);
     return true;
   }
+  if (template.kind === "function" && actual.kind === "function") {
+    return template.params.length === actual.params.length
+      && template.params.every((p, i) => infer(p, actual.params[i]!, names, found))
+      && infer(template.returns, actual.returns, names, found);
+  }
   if (template.kind === "array" && actual.kind === "array") return infer(template.element, actual.element, names, found);
   if (template.kind === "object" && actual.kind === "object") {
     for (const [name, value] of template.properties) {
@@ -133,7 +143,9 @@ export class TypeChecker {
   private diagnostic(message: string, statement?: Stmt): Error {
     const loc = statement?.loc;
     if (!loc) return new Error(`[Wibufy Type Error] ${message}`);
-    return new Error(formatDiagnostic("Type", this.sourceName, this.sourceText, loc.line, loc.column, message));
+    const readableMessage = message.replace(/\b__m\d+_([A-Za-z_]\w*)/g, "$1");
+    const readableSource = this.sourceText.replace(/\b__m\d+_([A-Za-z_]\w*)/g, "$1");
+    return new Error(formatDiagnostic("Type", this.sourceName, readableSource, loc.line, loc.column, readableMessage));
   }
   check(program: Stmt[]): void {
     this.scopes = [new Map()]; this.functions = new Map(); this.aliases = new Map(); this.currentReturn = null; this.genericScopes = [];
@@ -217,6 +229,10 @@ export class TypeChecker {
     const scope = this.scopes[this.scopes.length - 1]!;
     if (scope.has(name)) throw new Error(`Type error: '${name}' already declared in this scope.`);
     scope.set(name, { type, declaredType: type, mutable });
+  }
+  private findVariable(name: string): VariableSymbol | null {
+    for (let i = this.scopes.length - 1; i >= 0; i--) { const value = this.scopes[i]!.get(name); if (value) return value; }
+    return null;
   }
   private lookup(name: string): VariableSymbol {
     for (let i = this.scopes.length - 1; i >= 0; i--) { const value = this.scopes[i]!.get(name); if (value) return value; }
@@ -332,7 +348,16 @@ export class TypeChecker {
         return primitive("boolean");
       }
       case "grouping": return this.expression(e.expression);
-      case "variable": return this.lookup(e.name).type;
+      case "variable": {
+        const local = this.findVariable(e.name);
+        if (local) return local.type;
+        const fn = this.functions.get(e.name);
+        if (fn) {
+          if (fn.typeParameters.length) throw new Error(`Type error: generic function '${e.name}' cannot be used as an object property.`);
+          return { kind: "function", params: fn.params, returns: fn.returns };
+        }
+        throw new Error(`Type error: undefined variable '${e.name}'.`);
+      }
       case "assign": {
         const symbol = this.lookup(e.name);
         if (!symbol.mutable) throw new Error(`Type error: cannot assign to constant '${e.name}'.`);
@@ -397,7 +422,61 @@ export class TypeChecker {
         return value;
       }
       case "call": {
-        if (e.callee.kind !== "variable") throw new Error("Type error: only named function calls are supported.");
+        if (e.callee.kind === "property") {
+          const receiver = this.expression(e.callee.object);
+          if (receiver.kind === "array") {
+            const methodName = e.callee.name;
+            if (methodName !== "push") throw new Error(`Type error: unknown array method '${methodName}'.`);
+            if (e.typeArguments) throw new Error(`Type error: method '${methodName}' does not accept type arguments.`);
+            if (e.args.length !== 1) throw new Error(`Type error: method 'push' expects 1 argument, got ${e.args.length}.`);
+            const actual = this.expression(e.args[0]!, receiver.element);
+            if (!accepts(receiver.element, actual)) {
+              throw new Error(`Type error: argument 1 of method 'push' expects ${formatType(receiver.element)}, got ${formatType(actual)}.`);
+            }
+            return primitive("number");
+          }
+          if (!isPrimitive(receiver, "string")) {
+            const methodName = e.callee.name;
+            const properties = objectProperties(receiver);
+            if (!properties) throw new Error(`Type error: method '${methodName}' is not available on ${formatType(receiver)}.`);
+            const callable = properties.get(methodName);
+            if (!callable) throw new Error(`Type error: property '${methodName}' is not a function on ${formatType(receiver)}.`);
+            if (callable.kind !== "function") throw new Error(`Type error: property '${methodName}' is not callable; got ${formatType(callable)}.`);
+            if (e.typeArguments) throw new Error(`Type error: object function '${methodName}' does not accept type arguments.`);
+            if (e.args.length !== callable.params.length) throw new Error(`Type error: function property '${methodName}' expects ${callable.params.length} arguments, got ${e.args.length}.`);
+            const actuals = e.args.map((arg, i) => this.expression(arg, callable.params[i]));
+            callable.params.forEach((expected, i) => {
+              if (!accepts(expected, actuals[i]!)) throw new Error(`Type error: argument ${i + 1} of '${methodName}' expects ${formatType(expected)}, got ${formatType(actuals[i]!)}.`);
+            });
+            return callable.returns;
+          }
+          const signatures: Record<string, { params: PrimitiveName[]; returns: PrimitiveName }> = {
+            toUpperCase: { params: [], returns: "string" },
+            toLowerCase: { params: [], returns: "string" },
+            trim: { params: [], returns: "string" },
+            includes: { params: ["string"], returns: "boolean" },
+            startsWith: { params: ["string"], returns: "boolean" },
+            endsWith: { params: ["string"], returns: "boolean" },
+            indexOf: { params: ["string"], returns: "number" },
+            replace: { params: ["string", "string"], returns: "string" },
+          };
+          const methodName = e.callee.name;
+          const signature = signatures[methodName];
+          if (!signature) throw new Error(`Type error: unknown string method '${methodName}'.`);
+          if (e.typeArguments) throw new Error(`Type error: method '${methodName}' does not accept type arguments.`);
+          if (e.args.length !== signature.params.length) {
+            throw new Error(`Type error: method '${methodName}' expects ${signature.params.length} arguments, got ${e.args.length}.`);
+          }
+          e.args.forEach((arg, index) => {
+            const actual = this.expression(arg);
+            const expected = primitive(signature.params[index]!);
+            if (!accepts(expected, actual)) {
+              throw new Error(`Type error: argument ${index + 1} of method '${methodName}' expects ${formatType(expected)}, got ${formatType(actual)}.`);
+            }
+          });
+          return primitive(signature.returns);
+        }
+        if (e.callee.kind !== "variable") throw new Error("Type error: only named function calls and supported methods are allowed.");
         const name = e.callee.name, fn = this.functions.get(name);
         if (!fn) throw new Error(`Type error: unknown function '${name}'.`);
         if (e.args.length !== fn.params.length) throw new Error(`Type error: '${name}' expects ${fn.params.length} arguments, got ${e.args.length}.`);

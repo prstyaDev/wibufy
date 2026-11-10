@@ -160,3 +160,65 @@ print(count)
 `;
   assert.equal(await execute(compileSource(source)), 'true\n1\n');
 });
+
+
+test('compiler emits safe string method calls with interpreter-compatible results', async () => {
+  const source = `
+let text = "  Wibufy Language  "
+print(text.trim().toUpperCase())
+print(text.includes("Language"))
+print(text.indexOf("Language"))
+print(text.replace("Language", "Compiler"))
+`;
+  assert.equal(await execute(compileSource(source)), 'WIBUFY LANGUAGE\ntrue\n9\n  Wibufy Compiler  \n');
+});
+
+test('compiled string method receivers are evaluated exactly once', async () => {
+  const source = `
+let count = 0
+fn next() -> string {
+  count = count + 1
+  return "wibufy"
+}
+print(next().toUpperCase())
+print(count)
+`;
+  assert.equal(await execute(compileSource(source)), 'WIBUFY\n1\n');
+});
+
+test('compiler emits array push with compatible length and contents', async () => {
+  const source = `const values: Array<number> = [1, 2]
+print(values.push(3))
+print(values.length)
+print(values[2])`;
+  assert.equal(await execute(compileSource(source)), '3\n3\n3\n');
+});
+
+test('compiled array push evaluates its receiver exactly once', async () => {
+  const source = `let calls: number = 0
+const values: Array<number> = []
+fn getValues() -> Array<number> { calls = calls + 1; return values }
+getValues().push(7)
+print(calls)`;
+  assert.equal(await execute(compileSource(source)), '1\n');
+});
+
+
+test('JavaScript backend invokes function-valued object properties without changing string and array methods', async () => {
+  const source = `fn greet(name: string) -> string { return "Hello, " + name }
+let app = { greet: greet }
+print(app.greet("Wibufy"))
+print(app.greet("World").toUpperCase())
+let values: Array<number> = []
+print(values.push(7))
+print(values[0])`;
+  assert.equal(await execute(compileSource(source)), 'Hello, Wibufy\nHELLO, WORLD\n1\n7\n');
+});
+
+
+test('compiled object function properties can use built-in method names', async () => {
+  const source = `fn append(value: string) -> string { return value + "!" }
+let actions = { push: append }
+print(actions.push("Wibufy"))`;
+  assert.equal(await execute(compileSource(source)), 'Wibufy!\n');
+});
