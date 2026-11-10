@@ -176,7 +176,22 @@ export class Interpreter {
             return receiver.length;
           }
           if (typeof receiver !== "string") {
-            throw new Error(`Method '${e.callee.name}' requires a string receiver.`);
+            if (receiver !== null && typeof receiver === "object" && !Array.isArray(receiver)
+              && !(receiver instanceof WFunction) && !(receiver instanceof WNativeFunction)
+              && Object.prototype.hasOwnProperty.call(receiver, e.callee.name)) {
+              const callable = receiver[e.callee.name]!;
+              if (callable instanceof WNativeFunction) return this.invokeNative(callable.name, args);
+              if (!(callable instanceof WFunction)) throw new Error(`Property '${e.callee.name}' is not callable.`);
+              const declaration = callable.declaration;
+              if (args.length !== declaration.params.length) throw new Error(`Function property '${e.callee.name}' expects ${declaration.params.length} arguments, got ${args.length}.`);
+              const previous = this.environment; this.environment = new Environment(callable.closure);
+              declaration.params.forEach((p, i) => this.environment.define(p.name, args[i]!, false));
+              try { for (const child of declaration.body) this.execute(child); }
+              catch (error) { if (error instanceof ReturnSignal) return error.value; throw error; }
+              finally { this.environment = previous; }
+              return null;
+            }
+            throw new Error(`Method '${e.callee.name}' requires a string or object receiver.`);
           }
           switch (e.callee.name) {
             case "toUpperCase": if (args.length === 0) return receiver.toUpperCase(); break;

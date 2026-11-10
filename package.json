@@ -1,6 +1,6 @@
 {
   "name": "wibufy",
-  "version": "0.7.0-dev.8",
+  "version": "0.7.0-dev.9",
   "private": true,
   "type": "module",
   "description": "Wibufy programming language with a tree-walk interpreter and JavaScript compiler",

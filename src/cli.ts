@@ -11,7 +11,7 @@ import { runRepl } from "./repl.js";
 
 function usage(): void {
   console.error([
-    "Wibufy v0.7.0-dev.8",
+    "Wibufy v0.7.0-dev.9",
     "Usage:",
     "  wibufy run <file.wbf>",
     "  wibufy build <file.wbf> [--out <file.js>]",

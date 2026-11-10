@@ -202,3 +202,23 @@ getValues().push(7)
 print(calls)`;
   assert.equal(await execute(compileSource(source)), '1\n');
 });
+
+
+test('JavaScript backend invokes function-valued object properties without changing string and array methods', async () => {
+  const source = `fn greet(name: string) -> string { return "Hello, " + name }
+let app = { greet: greet }
+print(app.greet("Wibufy"))
+print(app.greet("World").toUpperCase())
+let values: Array<number> = []
+print(values.push(7))
+print(values[0])`;
+  assert.equal(await execute(compileSource(source)), 'Hello, Wibufy\nHELLO, WORLD\n1\n7\n');
+});
+
+
+test('compiled object function properties can use built-in method names', async () => {
+  const source = `fn append(value: string) -> string { return value + "!" }
+let actions = { push: append }
+print(actions.push("Wibufy"))`;
+  assert.equal(await execute(compileSource(source)), 'Wibufy!\n');
+});

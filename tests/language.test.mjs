@@ -757,3 +757,30 @@ test("array push rejects incompatible values and invalid calls", () => {
   assert.throws(() => compile(`const values: Array<number> = []\nvalues.push()`), /expects 1 argument, got 0/);
   assert.throws(() => compile(`const values: Array<number> = []\nvalues.pop()`), /unknown array method 'pop'/);
 });
+
+
+test("object properties can call stored functions with static argument and return types", () => {
+  const source = `fn greet(name: string) -> string { return "Hello, " + name }
+let app = { greet: greet }
+print(app.greet("Wibufy"))
+print(app.greet("World").toUpperCase())`;
+  assert.deepEqual(run(source), ["Hello, Wibufy", "HELLO, WORLD"]);
+});
+
+test("object function calls reject invalid arity, argument types, and non-callable properties", () => {
+  assert.throws(() => compile(`fn greet(name: string) -> string { return name }
+let app = { greet: greet }
+app.greet()`), /expects 1 arguments, got 0/);
+  assert.throws(() => compile(`fn greet(name: string) -> string { return name }
+let app = { greet: greet }
+app.greet(42)`), /expects string, got number/);
+  assert.throws(() => compile(`let app = { value: 42 }
+app.value()`), /not callable/);
+});
+
+
+test("object function properties can use names reserved by built-in methods", () => {
+  assert.deepEqual(run(`fn append(value: string) -> string { return value + "!" }
+let actions = { push: append }
+print(actions.push("Wibufy"))`), ["Wibufy!"]);
+});

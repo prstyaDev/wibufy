@@ -1,4 +1,4 @@
-# Wibufy v0.7.0-dev.8
+# Wibufy v0.7.0-dev.9
 
 Modern. Expressive. General-purpose.
 
@@ -214,7 +214,7 @@ Without `--write`, formatted source is printed to standard output. With `--write
 
 ### Method calls
 
-Wibufy supports string method calls, including chained calls:
+Wibufy supports function calls through object properties (`app.greet("Wibufy")`) as well as built-in string and array methods. Object function properties are checked for callability, argument count, and argument types. String method calls can also be chained:
 
 ```wbf
 let text = "  Wibufy Language  "
@@ -223,7 +223,7 @@ print(text.includes("Language"))
 print(text.replace("Language", "Compiler"))
 ```
 
-Available string methods are `toUpperCase()`, `toLowerCase()`, `trim()`, `includes(text)`, `startsWith(text)`, `endsWith(text)`, `indexOf(text)`, and `replace(search, replacement)`. Method calls are type-checked and work in both the interpreter and JavaScript compiler. Array `push(value)` is supported for mutable arrays, validates the element type, mutates the existing array, and returns its new length. The interpreter and JavaScript compiler share these semantics.
+Available string methods are `toUpperCase()`, `toLowerCase()`, `trim()`, `includes(text)`, `startsWith(text)`, `endsWith(text)`, `indexOf(text)`, and `replace(search, replacement)`. Method calls are type-checked and work in both the interpreter and JavaScript compiler. Array `push(value)` is supported for mutable arrays, validates the element type, mutates the existing array, and returns its new length. The interpreter and JavaScript compiler share these semantics, including calls to functions stored in object properties.
 
 
 ### Array append

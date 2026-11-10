@@ -1,7 +1,7 @@
 # Wibufy Language Specification
 ## Draft 0.7
 
-**Status:** v0.7.0-dev.8 development draft
+**Status:** v0.7.0-dev.9 development draft
 **Language:** Wibufy
 **File extension:** `.wbf`
 **Implementation language:** TypeScript
@@ -597,7 +597,7 @@ Alias normalization belongs in the frontend. For example, `koto` and `fn` should
 - [x] Interactive REPL with persistent successful declarations and multiline input.
 - [x] Improved lexer, parser, type, and runtime diagnostics.
 - [x] Initial Language Server Protocol stdio server with live lexer/parser/type diagnostics.
-- [x] String method calls with static validation and interpreter/compiler parity.
+- [x] String method calls and function-valued object property calls with static validation and interpreter/compiler parity.
 - [x] Typed array `push(value)` with updated length and interpreter/compiler parity.
 - [ ] Final integration, hardening, documentation, and regression verification.
 - Not included: full workspace-aware LSP imports, completion, hover, code actions, debugger, or standalone linter.
@@ -900,6 +900,8 @@ The initial language server does not yet resolve workspace imports. It therefore
 `wibufy repl` provides interactive execution. Successful declarations persist between submissions, standalone expressions print their values, and multiline blocks are supported. Imports and exports are not available in the REPL.
 
 ### Method calls and collection operations
+
+Object properties may hold named function values and be invoked with `object.method(arguments)`. The type checker validates that the property is callable, checks argument count and types, and returns the declared function result type. Generic functions are not yet supported as object properties. The interpreter and JavaScript compiler invoke these functions consistently.
 
 String values support `toUpperCase()`, `toLowerCase()`, `trim()`, `includes(text)`, `startsWith(text)`, `endsWith(text)`, `indexOf(text)`, and `replace(search, replacement)`. Calls may be chained and their receiver is evaluated exactly once.
 

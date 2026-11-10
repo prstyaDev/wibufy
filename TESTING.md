@@ -1,4 +1,4 @@
-# Wibufy v0.7.0-dev.8 — Testing Guide
+# Wibufy v0.7.0-dev.9 — Testing Guide
 
 ## Requirements and setup
 
@@ -54,6 +54,8 @@ Try `let answer = 40`, then `answer + 2`, then `.help` and `.exit`. The expressi
 The current language server skips type checking for documents containing imports because workspace-aware module analysis is not yet implemented. Completion, hover, code actions, rename, and debugging are not part of this milestone.
 
 ## Method and collection semantics
+- Object function properties can be called with `object.method(arguments)`; callability, arity, argument types, and return types are checked.
+- Interpreter and compiler both invoke object-stored functions with matching output.
 
 - String methods: `toUpperCase`, `toLowerCase`, `trim`, `includes`, `startsWith`, `endsWith`, `indexOf`, and `replace`.
 - Chained string method calls work and evaluate each receiver once.
