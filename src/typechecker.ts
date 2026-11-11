@@ -315,11 +315,15 @@ export class TypeChecker {
       const value = e.left.kind === "variable" && e.right.kind === "literal" && e.right.value === null ? e.left
         : e.right.kind === "variable" && e.left.kind === "literal" && e.left.value === null ? e.right : null;
       if (value) {
-        const current = this.lookup(value.name).type;
-        if (!members(current).some(member => isPrimitive(member, "null"))) return null;
+        const symbol = this.lookup(value.name);
+        const current = symbol.type;
+        const currentCanBeNull = members(current).some(member => isPrimitive(member, "null"));
+        const declaredCanBeNull = members(symbol.declaredType).some(member => isPrimitive(member, "null"));
+        if (!currentCanBeNull && !declaredCanBeNull) return null;
         const nonNull = withoutNull(current);
-        return e.operator === "!=" ? { name: value.name, whenTrue: nonNull, whenFalse: primitive("null") }
-          : { name: value.name, whenTrue: primitive("null"), whenFalse: nonNull };
+        const nullBranch = currentCanBeNull ? primitive("null") : primitive("never");
+        return e.operator === "!=" ? { name: value.name, whenTrue: nonNull, whenFalse: nullBranch }
+          : { name: value.name, whenTrue: nullBranch, whenFalse: nonNull };
       }
     }
     return null;
@@ -528,7 +532,16 @@ export class TypeChecker {
           return primitive("boolean");
         }
         if (["==", "!="].includes(e.operator)) {
-          if (!accepts(left, right) && !accepts(right, left)) throw new Error("Type error: equality operands must have compatible types.");
+          const leftVariable = e.left.kind === "variable" && e.right.kind === "literal" && e.right.value === null
+            ? this.findVariable(e.left.name) : null;
+          const rightVariable = e.right.kind === "variable" && e.left.kind === "literal" && e.left.value === null
+            ? this.findVariable(e.right.name) : null;
+          const nullableNullComparison = (leftVariable && members(leftVariable.declaredType).some(member => isPrimitive(member, "null")))
+            || (rightVariable && members(rightVariable.declaredType).some(member => isPrimitive(member, "null")))
+            || false;
+          if (!accepts(left, right) && !accepts(right, left) && !nullableNullComparison) {
+            throw new Error("Type error: equality operands must have compatible types.");
+          }
           return primitive("boolean");
         }
         if (["and", "or"].includes(e.operator)) {

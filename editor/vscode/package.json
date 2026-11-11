@@ -2,7 +2,7 @@
   "name": "wibufy-language",
   "displayName": "Wibufy Language Support",
   "description": "Language support for Wibufy source files (.wbf).",
-  "version": "0.7.0-dev.9",
+  "version": "0.8.0-dev.8.1",
   "publisher": "wibufy",
   "license": "MIT",
   "engines": {

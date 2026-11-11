@@ -1,7 +1,7 @@
 # Wibufy Language Specification
-## Draft 0.7
+## Draft 0.8
 
-**Status:** v0.7.0-dev.9 development draft
+**Status:** v0.8.0-dev.6 development draft
 **Language:** Wibufy
 **File extension:** `.wbf`
 **Implementation language:** TypeScript
@@ -908,3 +908,34 @@ String values support `toUpperCase()`, `toLowerCase()`, `trim()`, `includes(text
 Mutable arrays support `push(value)`. It validates the value against the array's invariant element type, appends exactly one element, mutates the existing array, and returns the new numeric length. Array index assignment remains strictly bounds-checked; it does not append. Both features are supported by the tree-walk interpreter and JavaScript compiler.
 
 **End of Wibufy Specification Draft 0.7**
+
+
+## 20. v0.8 Package Ecosystem (Draft 0.8)
+
+### 20.1 Project manifest and version resolution
+
+A Wibufy project declares its identity and direct dependency ranges in `wibufy.json`. The package manager uses strict SemVer and a single selected version per package name across the complete dependency graph. Resolution supports direct and transitive dependencies, highest-compatible selection, backtracking, and explicit missing-package or version-conflict diagnostics.
+
+### 20.2 Archive installation (dev.4)
+
+The installer is local-first and accepts `.tar.gz` archives explicitly through repeated `wibufy install --archive <path>` options. Every required direct and transitive package archive must be supplied. An archive contains a root `wibufy.json`, its declared `.wbf` entry, and package source files. The installer extracts each package into `packages/<name>/`.
+
+### 20.3 Strict lockfile
+
+`wibufy-lock.json` uses `lockfileVersion: 1` and records project identity, exact package versions, dependency ranges, and SHA-256 archive integrity. The lockfile is deterministic and contains only packages reachable from the project's direct dependencies. When a lockfile exists, installation must use its exact versions and integrity values; changed manifest dependencies, missing archives, altered archive bytes, incompatible transitive dependencies, and malformed lockfiles are rejected rather than silently re-resolved.
+
+### 20.4 Archive safety
+
+Only regular files and directories are extracted. Absolute paths, traversal segments, links, special tar entry types, malformed checksums, incomplete tar end markers, non-zero data after the end marker, duplicate normalized paths, file/directory path collisions, and oversized archives or files are rejected. Archive input paths must be regular files rather than symbolic links. Extraction is staged within the project before replacing the current `packages/` directory. Temporary staging paths are removed on completion or failure. At runtime, installed package directories, manifests, and declared entry files must be regular filesystem objects; package roots and entry paths are checked against their expected directories to prevent symbolic-link escapes.
+
+### 20.5 Current boundaries
+
+The v0.8 dev.6 package archive and local registry commands are:
+
+- `wibufy pack [output.tar.gz]` creates and validates a `.tar.gz` archive from a project. The default output is `dist/packages/<name>-<version>.tar.gz`.
+- `wibufy publish [project-directory]` publishes the project to `~/.wibufy/registry/<name>/<version>/`. Each release stores `package.tar.gz` and `metadata.json`; duplicate `name@version` releases are rejected.
+- `wibufy search [query]` searches local release names and descriptions. Results are checked against the archive manifest and SHA-256 integrity before being returned.
+
+Package creation excludes `.git`, `node_modules`, `packages`, `dist`, `.wibufy`, `wibufy-lock.json`, and `.DS_Store`. Symbolic links and special filesystem entries are rejected. Archive limits remain 20 MiB compressed, 50 MiB expanded, 10 MiB per file, and 10,000 entries. The registry is local-only and no network endpoint is contacted. Package imports support named and namespace imports through the shared module loader, type checker, interpreter, and JavaScript compiler. The v0.8 dev.8 hardening adds strict tar structure/path-collision checks and rejects symbolic links at installed package boundaries.
+
+**End of Wibufy Specification Draft 0.8**

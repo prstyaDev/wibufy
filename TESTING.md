@@ -1,4 +1,4 @@
-# Wibufy v0.7.0-dev.9 — Testing Guide
+# Wibufy v0.8.0-dev.4 — Testing Guide
 
 ## Requirements and setup
 
@@ -67,3 +67,55 @@ The current language server skips type checking for documents containing imports
 ## Regression coverage
 
 The test suite covers earlier language, type-system, module, standard-library, interpreter, compiler, diagnostics, formatter, REPL, editor-extension, and LSP diagnostic behavior. v0.7 integration tests also compare the output of the combined developer-tools example between interpreter and compiled JavaScript.
+
+
+## v0.8 dev.2 — Manifest validation and dev.2.1 nullable hotfix
+
+- Run `npm run dev -- validate <project-directory>` to validate `wibufy.json` and its entry file.
+- Confirm malformed JSON, invalid SemVer, invalid package/dependency names, unsupported dependency ranges, unknown fields, unsafe entry paths, and missing/non-file entry paths are rejected.
+- Confirm a valid manifest and existing `.wbf` entry are accepted.
+
+## v0.8 dev.3 — SemVer and dependency resolver
+
+- Verify SemVer parsing, numeric/prerelease ordering, and build-metadata-insensitive precedence.
+- Verify exact, caret, tilde, comparator, wildcard, comparator-intersection, and OR version ranges.
+- Verify prerelease admission follows SemVer range rules.
+- Resolve direct and transitive dependencies and prefer the highest compatible releases.
+- Confirm backtracking selects a lower release when a transitive constraint requires it.
+- Confirm one-version-per-package conflicts and missing packages are reported.
+- Reject invalid catalog metadata and duplicate package releases.
+- Confirm dependency cycles terminate without infinite resolution.
+
+
+## v0.8 dev.4 — package installation and strict lockfile
+
+- Create valid `.tar.gz` archives containing `wibufy.json` and the declared entry `.wbf` file.
+- Install direct and transitive dependencies with repeated `--archive` options.
+- Verify extracted packages appear under `packages/<name>/`.
+- Verify `wibufy-lock.json` records exact versions, dependency ranges, and SHA-256 integrity.
+- Repeat installation and confirm the strict lockfile selects the same exact versions.
+- Modify an archive without changing its package version and confirm integrity mismatch rejection.
+- Change project dependencies after lock creation and confirm strict lockfile rejection.
+- Confirm missing direct/transitive archives do not modify project packages or create a lockfile.
+- Reject archive path traversal, links, special tar entries, malformed checksums, and oversized content.
+- Verify an empty dependency map creates an empty lockfile.
+
+
+## v0.8 dev.7 — package import integration
+
+- Build a local package archive and install it into a separate consumer project.
+- Verify named imports with both `wibufy run` and `wibufy build` output.
+- Verify namespace imports with both `wibufy run` and `wibufy build` output.
+- Verify missing package imports report an actionable installation message.
+
+## v0.8 dev.8 — integration hardening and security
+
+- Verify the full regression suite and TypeScript check.
+- Reject archives without a complete two-block tar end marker.
+- Reject non-zero data after the tar end marker and invalid tar block alignment.
+- Reject duplicate normalized archive paths and file/directory path collisions.
+- Reject archive input paths that are symbolic links.
+- Reject installed package directory, manifest, or entry-file symbolic links.
+- Verify named and namespace package imports continue to work in the interpreter and JavaScript compiler.
+- Verify strict reinstall preserves exact versions and SHA-256 integrity.
+- Run the complete CLI package workflow: init, validate, pack, publish, search, install, run, and build.

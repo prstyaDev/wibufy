@@ -45,7 +45,7 @@ export async function runRepl(): Promise<void> {
   let pending = "";
   let historyStatements: Stmt[] = [];
 
-  console.log("Wibufy Interactive REPL v0.7.0-dev.9");
+  console.log("Wibufy Interactive REPL v0.8.0-dev.8.1");
   console.log("Type Wibufy code, .help for commands, or .exit to quit.");
   terminal.setPrompt("wibufy> ");
   terminal.prompt();

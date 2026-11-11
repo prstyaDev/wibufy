@@ -38,6 +38,25 @@ test("nullable values narrow after a null check", () => {
   assert.deepEqual(run(`let nickname: string | null = "Senpai"\nif nickname != null {\n print("Hello, " + nickname)\n}`), ["Hello, Senpai"]);
 });
 
+test("nullable variables remain comparable to null after non-null reassignment", () => {
+  assert.deepEqual(run(`let nickname: string | null = null
+nickname = "Senpai"
+if nickname != null {
+  print("Konnichiwa, " + nickname)
+}`), ["Konnichiwa, Senpai"]);
+});
+
+test("nullable variables can be reassigned to null after a non-null value", () => {
+  assert.deepEqual(run(`let nickname: string | null = null
+nickname = "Senpai"
+nickname = null
+if nickname == null { print("empty") }`), ["empty"]);
+});
+
+test("equality still rejects unrelated non-nullable types", () => {
+  assert.throws(() => compile(`let nickname: string = "Senpai"\nprint(nickname == 1)`), /equality operands must have compatible types/);
+});
+
 test("multiline expressions and multiline call arguments parse", () => {
   assert.deepEqual(run(`fn add(a: number, b: number) -> number { return a + b }\nprint(add(\n  10,\n  32\n))\nlet total = 1 +\n  2 +\n  3\nprint(total)`), ["42", "6"]);
 });

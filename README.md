@@ -1,8 +1,8 @@
-# Wibufy v0.7.0-dev.9
+# Wibufy v0.8.0-dev.6
 
 Modern. Expressive. General-purpose.
 
-Wibufy is an experimental, statically typed general-purpose programming language implemented in TypeScript. Version 0.7 development begins the developer-tools milestone, building on the JavaScript compiler, tree-walk interpreter, module system, advanced type system, and standard library.
+Wibufy is an experimental, statically typed general-purpose programming language implemented in TypeScript. The v0.7 developer-tools milestone is complete; the v0.8 development line is building a local-first package ecosystem on top of the interpreter, JavaScript compiler, module system, advanced type system, and standard library.
 
 ## Requirements
 
@@ -199,7 +199,28 @@ Use `--out <file.js>` (or `-o`) to choose a different output path. The compiler 
 The first compiler release targets Node.js. Browser, Deno, and Bun runtimes are future compatibility targets, not part of the current v0.6 guarantee. Source maps and full source-aware generated-code diagnostics are still under development.
 
 
-## Developer tools (v0.7 dev.8)
+## Package manager foundation (v0.8 dev.1–dev.6)
+
+The first package-manager milestone adds project initialization. Create a project in a new directory, or initialize the current directory:
+
+```bash
+npm run dev -- init my-project
+npm run dev -- init
+```
+
+Initialization writes `wibufy.json`, `src/main.wbf`, and a `.gitignore` when one does not already exist. Existing manifest or entry files are protected by default; pass `--force` to replace those generated files. An existing `.gitignore` is always preserved. The initial manifest uses version `0.1.0`, an empty dependency map, and `src/main.wbf` as its entry. No lockfile is created until dependencies are introduced.
+
+Validate a project's manifest and configured entry file with:
+
+```bash
+npm run dev -- validate my-project
+```
+
+Manifest validation checks the package name, strict SemVer version, optional description and relative `.wbf` entry path, dependency names and supported version-range syntax. The entry must exist and be a file inside the project directory. Unknown fields and malformed JSON are rejected with actionable errors. Supported dependency ranges include exact versions, caret (`^`), tilde (`~`), comparison operators, wildcard (`*`/`x`), comparator intersections (space-separated), and OR alternatives (`||`). SemVer comparison follows prerelease precedence and ignores build metadata for ordering.
+
+The SemVer engine is shared by manifest validation and dependency resolution. The resolver accepts a project dependency map and an available release catalog, resolves direct and transitive dependencies, prefers the highest compatible release, and backtracks when transitive constraints conflict. It enforces one selected version per package name and reports missing packages or incompatible constraints. It is exposed as a package-manager API in dev.3; registry discovery, installation, and lockfile writing are implemented in later milestones.
+
+## Developer tools (v0.7 complete)
 
 The VS Code extension in [`editor/vscode`](editor/vscode) registers `.wbf` files as Wibufy and provides syntax highlighting, a custom file icon, bracket/quote matching, indentation rules, starter snippets, and real-time diagnostics through the Wibufy Language Server.
 
@@ -256,3 +277,57 @@ npm run dev -- run examples/developer_tools.wbf
 npm run dev -- build examples/developer_tools.wbf -o /tmp/developer-tools.mjs
 node /tmp/developer-tools.mjs
 ```
+
+### SemVer and dependency resolution (v0.8 dev.3)
+
+The package-manager API exports `parseSemVer`, `compareSemVer`, `satisfiesVersionRange`, and `resolveDependencies`. A release catalog is an array of `{ name, version, dependencies }` records. Resolution returns a deterministically sorted package list and dependency edges. If the catalog cannot satisfy all constraints with one version per package name, the resolver throws `DependencyResolutionError` with `PACKAGE_NOT_FOUND` or `VERSION_CONFLICT`. Package releases with invalid metadata or duplicate `name@version` entries are rejected.
+
+
+## Package installation and strict lockfile (v0.8 dev.4)
+
+The installer currently accepts local `.tar.gz` package archives directly. Each archive must contain a root `wibufy.json` and its declared `.wbf` entry file. Supply every direct and transitive package archive in one command:
+
+```bash
+# The package folder contains wibufy.json and its declared entry file.
+tar -czf ../archives/alpha-1.2.0.tar.gz -C ../package-sources alpha
+
+wibufy install --archive ../archives/alpha-1.2.0.tar.gz --archive ../archives/shared-2.1.4.tar.gz
+```
+
+The installer resolves the project dependency ranges using the dev.3 resolver, extracts packages into the project-local `packages/` directory, and writes `wibufy-lock.json`. The lockfile records the project identity, exact selected versions, dependency ranges, and SHA-256 archive integrity. Subsequent installs use the lockfile's exact package versions and reject changed project dependencies, missing archives, or integrity mismatches.
+
+Archive extraction rejects absolute/traversal paths, symbolic and hard links, special tar entries, oversized archives/files, invalid checksums, and duplicate filesystem paths. Installation is staged before replacing the existing `packages/` directory. The CLI archive source was intentionally explicit in dev.4; dev.6 adds archive creation and a local registry without network access.
+
+
+## Package management (v0.8 dev.5)
+
+Package management is local-first. Run commands from the project directory.
+
+- `wibufy add <name> <range> --archive <file.tar.gz> ...` adds a direct dependency and resolves the full graph. Supply archives for the new package and every required direct/transitive package.
+- `wibufy remove <name>` removes a direct dependency and prunes packages that are no longer reachable from remaining direct dependencies.
+- `wibufy update --archive <file.tar.gz> ...` re-resolves all dependencies against the supplied local archives, preferring the highest compatible versions.
+- `wibufy list` displays direct and transitive packages from the strict lockfile.
+
+`add` and `update` require all archives needed to resolve the resulting dependency graph. No network registry is contacted. `remove` uses the existing lockfile and does not need archives.
+
+
+## Package archive and local registry (v0.8 dev.6)
+
+Create a distributable archive from the current project:
+
+```bash
+wibufy pack
+wibufy pack ./artifacts/my-package.tar.gz
+```
+
+The default output is `dist/packages/<name>-<version>.tar.gz`. Package creation validates `wibufy.json` and the declared entry file, then includes project files while excluding `.git/`, `node_modules/`, `packages/`, `dist/`, `.wibufy/`, `wibufy-lock.json`, and `.DS_Store`. Symbolic links and special filesystem entries are rejected. The archive uses the same size limits and validation rules as package installation. Existing output files are never overwritten.
+
+Publish the current project to the local registry and search published releases:
+
+```bash
+wibufy publish
+wibufy search
+wibufy search json
+```
+
+The registry is stored under `~/.wibufy/registry/<name>/<version>/`, with `package.tar.gz` and `metadata.json` for each release. Publishing validates the generated archive, records its SHA-256 integrity, and refuses to replace an existing `name@version`. Search matches package names and descriptions and verifies archive identity, metadata, and integrity before displaying a release. The registry is local to the current user account; these commands do not contact a network service. Package imports are resolved from `packages/<name>/` and are supported by the module loader, type checker, interpreter, and JavaScript compiler. The dev.8 hardening rejects malformed tar endings, duplicate archive paths, file/directory path collisions, and symbolic links in installed package roots, manifests, or entry files.
