@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { dirname, extname, resolve } from "node:path";
+import { access, readFile, realpath, lstat } from "node:fs/promises";
+import { dirname, extname, relative, resolve, sep, isAbsolute } from "node:path";
 import type { Expr, Stmt, TypeRef } from "./ast.js";
 import { Lexer } from "./lexer.js";
 import { Parser } from "./parser.js";
@@ -51,9 +51,11 @@ export class ModuleLoader {
   private readonly active = new Set<string>();
   private readonly ordered: ModuleRecord[] = [];
   private nextId = 0;
+  private projectRoot: string | undefined;
 
   async load(entryPath: string): Promise<{ program: Stmt[]; source: string; sourceName: string }> {
     const absolute = resolve(entryPath);
+    this.projectRoot = await this.findProjectRoot(dirname(absolute));
     if (extname(absolute) !== ".wbf") throw new Error("Wibufy source files must use the .wbf extension.");
     await this.visit(absolute);
     const flattened: Stmt[] = [];
@@ -67,6 +69,85 @@ export class ModuleLoader {
     }
     const entry = this.cache.get(absolute)!;
     return { program: flattened, source: entry.source, sourceName: absolute };
+  }
+
+
+  private async findProjectRoot(startDirectory: string): Promise<string | undefined> {
+    let current = resolve(startDirectory);
+    while (true) {
+      try {
+        await access(resolve(current, "wibufy.json"));
+        return current;
+      } catch {
+        const parent = dirname(current);
+        if (parent === current) return undefined;
+        current = parent;
+      }
+    }
+  }
+
+  private async resolveInstalledPackage(packageName: string): Promise<string> {
+    if (!/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/.test(packageName) || packageName.includes("..")) {
+      throw new Error(`[Wibufy Package Error] Invalid package import '${packageName}'. Use a package name without subpaths.`);
+    }
+    if (!this.projectRoot) throw new Error("[Wibufy Package Error] Could not find the project root (wibufy.json) for package imports.");
+    const packagesDirectory = resolve(this.projectRoot, "packages");
+    const packageDirectory = resolve(packagesDirectory, packageName);
+    const manifestPath = resolve(packageDirectory, "wibufy.json");
+    let manifest: unknown;
+    try {
+      const packagesMetadata = await lstat(packagesDirectory);
+      const packageMetadata = await lstat(packageDirectory);
+      if (packagesMetadata.isSymbolicLink() || !packagesMetadata.isDirectory() || packageMetadata.isSymbolicLink() || !packageMetadata.isDirectory()) {
+        throw new Error(`[Wibufy Package Error] Installed package path for '${packageName}' must not be a symbolic link or non-directory.`);
+      }
+      const [packagesReal, packageReal] = await Promise.all([realpath(packagesDirectory), realpath(packageDirectory)]);
+      const packageRelative = relative(packagesReal, packageReal);
+      if (packageRelative === ".." || packageRelative.startsWith(`..${sep}`) || isAbsolute(packageRelative)) {
+        throw new Error(`[Wibufy Package Error] Installed package '${packageName}' resolves outside the packages directory.`);
+      }
+      const manifestMetadata = await lstat(manifestPath);
+      if (manifestMetadata.isSymbolicLink() || !manifestMetadata.isFile()) {
+        throw new Error(`[Wibufy Package Error] Package '${packageName}' manifest must be a regular file, not a link or special filesystem object.`);
+      }
+      manifest = JSON.parse(await readFile(manifestPath, "utf8")) as unknown;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(`[Wibufy Package Error] Package '${packageName}' is not installed. Run 'wibufy install' first.`);
+      }
+      throw new Error(`[Wibufy Package Error] Unable to read '${packageName}' manifest: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (typeof manifest !== "object" || manifest === null || Array.isArray(manifest)) {
+      throw new Error(`[Wibufy Package Error] Package '${packageName}' has an invalid wibufy.json.`);
+    }
+    const data = manifest as Record<string, unknown>;
+    if (data.name !== packageName || typeof data.version !== "string") {
+      throw new Error(`[Wibufy Package Error] Installed package identity does not match '${packageName}'.`);
+    }
+    const entry = typeof data.entry === "string" ? data.entry : "src/main.wbf";
+    if (!entry.endsWith(".wbf") || entry.includes("\\") || entry.includes(":") || isAbsolute(entry) || entry.split("/").some(part => !part || part === "." || part === "..")) {
+      throw new Error(`[Wibufy Package Error] Package '${packageName}' has an unsafe entry path.`);
+    }
+    const entryPath = resolve(packageDirectory, entry);
+    const relativeEntry = relative(packageDirectory, entryPath);
+    if (relativeEntry === ".." || relativeEntry.startsWith(`..${sep}`) || isAbsolute(relativeEntry)) {
+      throw new Error(`[Wibufy Package Error] Package '${packageName}' entry escapes its installation directory.`);
+    }
+    try {
+      const entryMetadata = await lstat(entryPath);
+      if (entryMetadata.isSymbolicLink() || !entryMetadata.isFile()) {
+        throw new Error(`[Wibufy Package Error] Package '${packageName}' entry must be a regular file, not a link or special filesystem object.`);
+      }
+      const [rootReal, entryReal] = await Promise.all([realpath(packageDirectory), realpath(entryPath)]);
+      const realRelative = relative(rootReal, entryReal);
+      if (realRelative === ".." || realRelative.startsWith(`..${sep}`) || isAbsolute(realRelative)) {
+        throw new Error(`[Wibufy Package Error] Package '${packageName}' entry resolves outside its installation directory.`);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new Error(`[Wibufy Package Error] Package '${packageName}' entry '${entry}' does not exist.`);
+      throw error;
+    }
+    return entryPath;
   }
 
   private async visit(path: string): Promise<ModuleRecord> {
@@ -102,11 +183,14 @@ export class ModuleLoader {
         if (!standardLibrary[statement.source]) throw new Error(`[Wibufy Module Error] Unknown standard library module '${statement.source}'.`);
         const builtin = await this.visitBuiltin(statement.source);
         this.bindImport(record, statement, builtin);
-      } else {
-        if (!statement.source.startsWith(".")) throw new Error(`[Wibufy Module Error] Local module paths must be relative: '${statement.source}'.`);
+      } else if (statement.source.startsWith(".")) {
         const resolved = resolve(dirname(path), statement.source);
         if (extname(resolved) !== ".wbf") throw new Error(`[Wibufy Module Error] Local imports must use the .wbf extension: '${statement.source}'.`);
         const dependency = await this.visit(resolved);
+        this.bindImport(record, statement, dependency);
+      } else {
+        const packageEntry = await this.resolveInstalledPackage(statement.source);
+        const dependency = await this.visit(packageEntry);
         this.bindImport(record, statement, dependency);
       }
     }

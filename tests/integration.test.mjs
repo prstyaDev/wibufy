@@ -29,3 +29,23 @@ test("v0.7 developer-tools example has matching interpreter and compiler behavio
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("nullable example supports reassignment before null narrowing in interpreter and compiler", async () => {
+  const source = await readFile(new URL("../examples/nullable.wbf", import.meta.url), "utf8");
+  const program = new Parser(new Lexer(source, "nullable.wbf").scan(), source, "nullable.wbf").parse();
+  new TypeChecker("nullable.wbf", source).check(program);
+
+  const interpreted = [];
+  new Interpreter(value => interpreted.push(String(value)), "nullable.wbf", source).interpret(program);
+
+  const directory = await mkdtemp(join(tmpdir(), "wibufy-nullable-integration-"));
+  try {
+    const output = join(directory, "nullable.mjs");
+    await writeFile(output, new Compiler().compile(program).code, "utf8");
+    const compiled = execFileSync(process.execPath, [output], { encoding: "utf8" });
+    assert.equal(compiled, interpreted.join("\n") + "\n");
+    assert.equal(compiled, "Konnichiwa, Senpai\n");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

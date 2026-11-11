@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -149,5 +149,81 @@ test("the JSON module exports its safe JsonValue type", async () => {
     "main.wbf": `import { JsonValue, stringify } from "wibufy/json"\nlet value: JsonValue = { name: "Wibufy" }\nprint(stringify(value))`,
   }, async directory => {
     assert.deepEqual(await runFile(join(directory, "main.wbf")), ['{"name":"Wibufy"}']);
+  });
+});
+
+test("installed package named imports work through typechecker and interpreter", async () => {
+  await fixture({
+    "wibufy.json": JSON.stringify({ name: "demo-app", version: "1.0.0", entry: "src/main.wbf", dependencies: { greeter: "^1.0.0" } }),
+    "src/main.wbf": `import { greet } from "greeter"\nprint(greet("Wibufy"))`,
+    "packages/greeter/wibufy.json": JSON.stringify({ name: "greeter", version: "1.2.0", entry: "src/index.wbf", dependencies: {} }),
+    "packages/greeter/src/index.wbf": `export fn greet(name: string) -> string { return "Hello, " + name }`,
+  }, async directory => {
+    assert.deepEqual(await runFile(join(directory, "src/main.wbf")), ["Hello, Wibufy"]);
+  });
+});
+
+test("installed package namespace imports work", async () => {
+  await fixture({
+    "wibufy.json": JSON.stringify({ name: "demo-app", version: "1.0.0", entry: "src/main.wbf", dependencies: { mathkit: "1.0.0" } }),
+    "src/main.wbf": `import * as math from "mathkit"\nprint(math.double(21))`,
+    "packages/mathkit/wibufy.json": JSON.stringify({ name: "mathkit", version: "1.0.0", entry: "src/main.wbf", dependencies: {} }),
+    "packages/mathkit/src/main.wbf": `export fn double(value: number) -> number { return value * 2 }`,
+  }, async directory => {
+    assert.deepEqual(await runFile(join(directory, "src/main.wbf")), ["42"]);
+  });
+});
+
+test("installed package directory symlinks cannot escape the project packages directory", async () => {
+  await fixture({
+    "wibufy.json": JSON.stringify({ name: "demo-app", version: "1.0.0", entry: "src/main.wbf", dependencies: { greeter: "1.0.0" } }),
+    "src/main.wbf": `import { greet } from "greeter"\nprint(greet("Wibufy"))`,
+  }, async directory => {
+    const outside = join(directory, "outside-package");
+    await mkdir(join(outside, "src"), { recursive: true });
+    await writeFile(join(outside, "wibufy.json"), JSON.stringify({ name: "greeter", version: "1.0.0", entry: "src/main.wbf", dependencies: {} }));
+    await writeFile(join(outside, "src/main.wbf"), `export fn greet(name: string) -> string { return name }`);
+    await mkdir(join(directory, "packages"), { recursive: true });
+    await symlink(outside, join(directory, "packages/greeter"), "dir");
+    await assert.rejects(() => new ModuleLoader().load(join(directory, "src/main.wbf")), /must not be a symbolic link/);
+  });
+});
+
+test("installed package entry symlinks are rejected", async () => {
+  await fixture({
+    "wibufy.json": JSON.stringify({ name: "demo-app", version: "1.0.0", entry: "src/main.wbf", dependencies: { greeter: "1.0.0" } }),
+    "src/main.wbf": `import { greet } from "greeter"\nprint(greet("Wibufy"))`,
+    "packages/greeter/wibufy.json": JSON.stringify({ name: "greeter", version: "1.0.0", entry: "src/main.wbf", dependencies: {} }),
+  }, async directory => {
+    const outside = join(directory, "outside.wbf");
+    await writeFile(outside, `export fn greet(name: string) -> string { return name }`);
+    await mkdir(join(directory, "packages/greeter/src"), { recursive: true });
+    await symlink(outside, join(directory, "packages/greeter/src/main.wbf"), "file");
+    await assert.rejects(() => new ModuleLoader().load(join(directory, "src/main.wbf")), /entry must be a regular file/);
+  });
+});
+
+test("missing installed packages produce an actionable error", async () => {
+  await fixture({
+    "wibufy.json": JSON.stringify({ name: "demo-app", version: "1.0.0", entry: "src/main.wbf", dependencies: { absent: "1.0.0" } }),
+    "src/main.wbf": `import { value } from "absent"\nprint(value)`,
+  }, async directory => {
+    await assert.rejects(() => new ModuleLoader().load(join(directory, "src/main.wbf")), /Package 'absent' is not installed/);
+  });
+});
+
+test("installed package imports are flattened for JavaScript compilation", async () => {
+  const { Compiler } = await import("../dist/compiler.js");
+  await fixture({
+    "wibufy.json": JSON.stringify({ name: "demo-app", version: "1.0.0", entry: "src/main.wbf", dependencies: { greeter: "1.0.0" } }),
+    "src/main.wbf": `import { greet } from "greeter"\nprint(greet("compiler"))`,
+    "packages/greeter/wibufy.json": JSON.stringify({ name: "greeter", version: "1.0.0", entry: "src/main.wbf", dependencies: {} }),
+    "packages/greeter/src/main.wbf": `export fn greet(name: string) -> string { return "Hello, " + name }`,
+  }, async directory => {
+    const loaded = await new ModuleLoader().load(join(directory, "src/main.wbf"));
+    new TypeChecker(loaded.sourceName, loaded.source).check(loaded.program);
+    const compiled = new Compiler().compile(loaded.program);
+    assert.match(compiled.code, /Hello, /);
+    assert.match(compiled.code, /wibufyUser_5f_5f_6d_31_5f_67_72_65_65_74/);
   });
 });
